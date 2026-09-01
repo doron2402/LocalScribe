@@ -53,6 +53,9 @@ WHISPER_COMPUTE = _env("MEETNOTES_WHISPER_COMPUTE", "int8")
 SUMMARY_BACKEND = _env("MEETNOTES_SUMMARY_BACKEND", "ollama")
 OLLAMA_HOST = _env("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
 OLLAMA_MODEL = _env("MEETNOTES_OLLAMA_MODEL", "llama3.1:8b")
+# Start the Ollama daemon on demand rather than making it the user's problem.
+# Only ever applies to a local host.
+OLLAMA_AUTOSTART = _env("MEETNOTES_OLLAMA_AUTOSTART", "1").lower() not in ("0", "false", "no")
 ANTHROPIC_API_KEY = _env("ANTHROPIC_API_KEY", "")
 ANTHROPIC_MODEL = _env("MEETNOTES_ANTHROPIC_MODEL", "claude-sonnet-5")
 

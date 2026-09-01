@@ -145,7 +145,22 @@ if [[ $DO_LLM -eq 1 ]]; then
   fi
 fi
 
-# ----------------------------------------------------------------- 5. check
+# ------------------------------------------------------------- 5. PATH link
+bold "Command line"
+LINK_DIR=""
+for d in "$HOME/.local/bin" "$HOME/bin"; do
+  case ":$PATH:" in *":$d:"*) LINK_DIR="$d"; break ;; esac
+done
+if [[ -n "$LINK_DIR" ]]; then
+  mkdir -p "$LINK_DIR"
+  ln -sf "$PWD/bin/meetnotes" "$LINK_DIR/meetnotes"
+  ok "linked into $LINK_DIR — just run: meetnotes"
+else
+  warn "No writable PATH directory found. Run it as ./bin/meetnotes, or link it:"
+  echo "        ln -sf $PWD/bin/meetnotes /usr/local/bin/meetnotes"
+fi
+
+# ----------------------------------------------------------------- 6. check
 bold "Checking the install"
 .venv/bin/python -m pytest tests -q 2>&1 | tail -2
 .venv/bin/meetnotes doctor || true
@@ -169,5 +184,5 @@ fi
 cat <<'MSG'
 
   Record your first meeting:
-    .venv/bin/meetnotes record --label "Standup"
+    meetnotes record --label "Standup"
 MSG

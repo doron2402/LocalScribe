@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+#
+# Runs meetnotes from this checkout's virtualenv, so you don't have to remember
+# where it lives or activate anything. Safe to symlink onto your PATH — it
+# resolves back through the symlink to find the repo.
+#
+set -euo pipefail
+
+src="${BASH_SOURCE[0]}"
+while [ -L "$src" ]; do
+  dir="$(cd -P "$(dirname "$src")" && pwd)"
+  src="$(readlink "$src")"
+  [[ "$src" != /* ]] && src="$dir/$src"
+done
+ROOT="$(cd -P "$(dirname "$src")/.." && pwd)"
+
+BIN="$ROOT/.venv/bin/meetnotes"
+if [[ ! -x "$BIN" ]]; then
+  echo "meetnotes isn't installed yet. Run:" >&2
+  echo "    $ROOT/scripts/setup.sh" >&2
+  exit 1
+fi
+
+exec "$BIN" "$@"

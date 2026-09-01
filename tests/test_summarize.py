@@ -64,3 +64,50 @@ def test_extractive_finds_actions_decisions_and_questions():
 
 def test_extractive_survives_an_empty_transcript():
     assert "## TL;DR" in _extractive(_transcript([]))
+
+
+# --- Ollama autostart -------------------------------------------------------
+
+def test_autostart_is_skipped_when_already_running(monkeypatch):
+    from meetnotes import summarize as S
+    monkeypatch.setattr(S, "ollama_available", lambda: True)
+    monkeypatch.setattr(S.shutil, "which", lambda n: (_ for _ in ()).throw(AssertionError("looked for the binary")))
+    assert S.ensure_ollama() is True
+
+
+def test_autostart_launches_the_daemon(monkeypatch):
+    from meetnotes import summarize as S
+    states = iter([False, False, True])
+    monkeypatch.setattr(S, "ollama_available", lambda: next(states))
+    monkeypatch.setattr(S.shutil, "which", lambda n: "/opt/homebrew/bin/ollama")
+    launched = []
+    monkeypatch.setattr(S.subprocess, "Popen", lambda cmd, **kw: launched.append((cmd, kw)))
+    monkeypatch.setattr(S.time, "sleep", lambda s: None)
+    notified = []
+    assert S.ensure_ollama(on_start=lambda: notified.append(1)) is True
+    assert launched[0][0] == ["/opt/homebrew/bin/ollama", "serve"]
+    assert launched[0][1]["start_new_session"] is True   # must outlive this process
+    assert notified == [1]
+
+
+def test_autostart_gives_up_when_ollama_is_absent(monkeypatch):
+    from meetnotes import summarize as S
+    monkeypatch.setattr(S, "ollama_available", lambda: False)
+    monkeypatch.setattr(S.shutil, "which", lambda n: None)
+    assert S.ensure_ollama() is False
+
+
+def test_a_remote_ollama_is_never_started_locally(monkeypatch):
+    from meetnotes import summarize as S
+    monkeypatch.setattr(S, "ollama_available", lambda: False)
+    monkeypatch.setattr(S.config, "OLLAMA_HOST", "http://gpu-box.local:11434")
+    monkeypatch.setattr(S.shutil, "which", lambda n: "/opt/homebrew/bin/ollama")
+    assert S.ensure_ollama() is False
+
+
+def test_autostart_can_be_turned_off(monkeypatch):
+    from meetnotes import summarize as S
+    monkeypatch.setattr(S, "ollama_available", lambda: False)
+    monkeypatch.setattr(S.config, "OLLAMA_AUTOSTART", False)
+    monkeypatch.setattr(S.shutil, "which", lambda n: "/opt/homebrew/bin/ollama")
+    assert S.ensure_ollama() is False

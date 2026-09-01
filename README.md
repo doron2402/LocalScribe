@@ -36,8 +36,9 @@ cd meetnotes
 ```
 
 That one script sets up the virtualenv, installs BlackHole, downloads the
-Whisper model, installs Ollama and pulls the summarizer model, then runs the
-tests and `doctor`. It is safe to re-run; every step checks first.
+Whisper model, installs Ollama and pulls the summarizer model, links a
+`meetnotes` command onto your PATH, then runs the tests and `doctor`. It is
+safe to re-run; every step checks first.
 
 ```bash
 ./scripts/setup.sh --no-llm                    # skip Ollama entirely
@@ -62,7 +63,22 @@ the call. After `setup.sh` installs BlackHole and you reboot:
 You still hear the call normally; BlackHole carries a copy that meetnotes reads.
 `meetnotes doctor` tells you whether it found the device.
 
+## Does it need a server?
+
+No. `meetnotes` is a one-shot command: it records, transcribes, summarizes,
+writes two markdown files and exits. Nothing listens on a port, nothing runs in
+the background between meetings, and none of it needs the network.
+
+The one exception is the local summarizer. Ollama is a daemon on
+`127.0.0.1:11434`, and meetnotes starts it on demand if it isn't already up —
+so it is not something you have to remember either. Set
+`MEETNOTES_OLLAMA_AUTOSTART=0` to manage it yourself, or use
+`--backend extractive` and there is no daemon at all.
+
 ## Use
+
+`scripts/setup.sh` links a `meetnotes` command onto your PATH. Otherwise run
+`./bin/meetnotes` from the checkout — same thing, no virtualenv to activate.
 
 ```bash
 meetnotes doctor                       # check the setup
@@ -159,7 +175,7 @@ is read separately, then the notes are merged.
 ## Development
 
 ```bash
-.venv/bin/pytest          # 53 tests, no audio hardware or model downloads
+.venv/bin/pytest          # 58 tests, no audio hardware or model downloads
 .venv/bin/ruff check .
 ```
 
@@ -177,6 +193,7 @@ meetnotes/
 │   ├── summarize.py    ollama / anthropic / extractive backends
 │   ├── config.py       env overrides, all optional
 │   └── cli.py          record, process, summarize, devices, doctor, list
+├── bin/meetnotes       launcher: runs the venv's CLI from anywhere
 ├── scripts/setup.sh    one-command install
 └── tests/
 ```

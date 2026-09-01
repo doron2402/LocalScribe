@@ -85,6 +85,8 @@ def cmd_devices(args) -> int:
 
 
 def cmd_doctor(args) -> int:
+    import shutil
+
     from .summarize import ollama_available, ollama_models
 
     ok = True
@@ -143,10 +145,13 @@ def cmd_doctor(args) -> int:
                               f"Run: ollama pull {config.OLLAMA_MODEL}")
                 if models:
                     console.print(f"      Installed: {', '.join(models)}")
+        elif shutil.which("ollama"):
+            console.print("  [green]✓[/green] Ollama installed (not running — "
+                          "meetnotes starts it when it needs it)")
         else:
             ok = False
-            console.print(f"  [red]✗[/red] Ollama not reachable at {config.OLLAMA_HOST}. "
-                          f"`brew install ollama && ollama serve`, or use --backend extractive.")
+            console.print("  [red]✗[/red] Ollama not installed. Run `brew install ollama`, "
+                          "or use --backend extractive.")
     elif backend == "anthropic":
         if config.ANTHROPIC_API_KEY:
             console.print("  [green]✓[/green] ANTHROPIC_API_KEY set")

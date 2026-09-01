@@ -8,6 +8,9 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
+import subprocess
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -149,6 +152,43 @@ def ollama_models() -> list[str]:
             return [m["name"] for m in json.loads(r.read()).get("models", [])]
     except Exception:
         return []
+
+
+def _is_local(host: str) -> bool:
+    return any(h in host for h in ("127.0.0.1", "localhost", "::1", "0.0.0.0"))
+
+
+def ensure_ollama(timeout: float = 20.0, on_start=None) -> bool:
+    """Bring the Ollama daemon up if it isn't already listening.
+
+    meetnotes itself is a one-shot process with no server of its own, and the
+    daemon is the only thing standing between a recording and its summary — so
+    starting it is our job, not the user's.
+    """
+    if ollama_available():
+        return True
+    if not config.OLLAMA_AUTOSTART or not _is_local(config.OLLAMA_HOST):
+        return False
+    exe = shutil.which("ollama")
+    if not exe:
+        return False
+    if on_start:
+        on_start()
+    try:
+        subprocess.Popen(
+            [exe, "serve"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,   # outlives this process
+        )
+    except OSError:
+        return False
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if ollama_available():
+            return True
+        time.sleep(0.5)
+    return False
 
 
 def _ollama(prompt: str, model: str) -> str:
@@ -301,10 +341,10 @@ def summarize(
         def call(prompt: str) -> str:
             return _ollama(prompt, model)
 
-        if not ollama_available():
+        if not ensure_ollama(on_start=lambda: on_progress and on_progress("starting Ollama", 0, 1)):
             raise SummaryError(
-                f"Ollama is not running at {config.OLLAMA_HOST}. "
-                "Start it with `ollama serve`, or pass --backend extractive."
+                f"Could not reach or start Ollama at {config.OLLAMA_HOST}. "
+                "Install it (brew install ollama), or pass --backend extractive."
             )
     elif backend == "anthropic":
         model = model or config.ANTHROPIC_MODEL
