@@ -1,6 +1,6 @@
 import pytest
 
-from meetnotes import engines
+from localscribe import engines
 
 
 @pytest.fixture

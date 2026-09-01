@@ -1,5 +1,5 @@
 [project]
-name = "meetnotes"
+name = "localscribe"
 version = "0.1.0"
 description = "Record meetings locally, transcribe them offline, summarize them. No audio leaves the machine."
 readme = "README.md"
@@ -32,18 +32,18 @@ mlx = ["mlx-whisper>=0.4"]
 dev = ["pytest>=8.0", "ruff>=0.6"]
 
 [project.urls]
-Homepage = "https://github.com/doron2402/meetnotes"
-Issues = "https://github.com/doron2402/meetnotes/issues"
+Homepage = "https://github.com/doron2402/LocalScribe"
+Issues = "https://github.com/doron2402/LocalScribe/issues"
 
 [project.scripts]
-meetnotes = "meetnotes.cli:main"
+localscribe = "localscribe.cli:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["meetnotes"]
+packages = ["localscribe"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

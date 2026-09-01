@@ -104,14 +104,16 @@ def normalize_actions(summary: str) -> str:
             out.append(line)
             continue
         body = m.group(1).strip()
-        if body.startswith("[ ]") or body.startswith("[x]"):
-            out.append(f"- {body}")
-            continue
+        # A model may or may not have produced the checkbox itself; either way
+        # the owner still needs formatting, so strip it and put it back.
+        box = "[ ]"
+        if body[:3] in ("[ ]", "[x]", "[X]"):
+            box, body = body[:3].lower(), body[3:].strip()
         # "Owner: task" / "Owner - task" -> "- [ ] **Owner** — task"
         owner = re.match(r"^\*{0,2}([A-Z][\w .'-]{0,28}?)\*{0,2}\s*[:\u2014-]\s+(.*)$", body)
         if owner:
             body = f"**{owner.group(1).strip()}** \u2014 {owner.group(2).strip()}"
-        out.append(f"- [ ] {body}")
+        out.append(f"- {box} {body}")
     return "\n".join(out)
 
 
@@ -161,7 +163,7 @@ def _is_local(host: str) -> bool:
 def ensure_ollama(timeout: float = 20.0, on_start=None) -> bool:
     """Bring the Ollama daemon up if it isn't already listening.
 
-    meetnotes itself is a one-shot process with no server of its own, and the
+    localscribe itself is a one-shot process with no server of its own, and the
     daemon is the only thing standing between a recording and its summary — so
     starting it is our job, not the user's.
     """

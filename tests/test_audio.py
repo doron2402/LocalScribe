@@ -1,12 +1,12 @@
 import numpy as np
 
-from meetnotes import config
-from meetnotes.audio import Device, _Source, find_device
+from localscribe import config
+from localscribe.audio import Device, _Source, find_device
 
 
 def _devices(monkeypatch, names):
     devs = [Device(i, n, 1, 48000.0) for i, n in enumerate(names)]
-    monkeypatch.setattr("meetnotes.audio.list_input_devices", lambda: devs)
+    monkeypatch.setattr("localscribe.audio.list_input_devices", lambda: devs)
     return devs
 
 

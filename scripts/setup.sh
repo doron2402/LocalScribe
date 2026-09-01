@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# One command to get meetnotes running: Python env, system-audio loopback,
+# One command to get localscribe running: Python env, system-audio loopback,
 # speech model, local LLM. Safe to re-run — every step checks first.
 #
 #   ./scripts/setup.sh                  # everything
@@ -11,8 +11,8 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-WHISPER_MODEL="${MEETNOTES_WHISPER_MODEL:-large-v3-turbo}"
-LLM_MODEL="${MEETNOTES_OLLAMA_MODEL:-llama3.1:8b}"
+WHISPER_MODEL="${LOCALSCRIBE_WHISPER_MODEL:-large-v3-turbo}"
+LLM_MODEL="${LOCALSCRIBE_OLLAMA_MODEL:-llama3.1:8b}"
 DO_LLM=1; DO_AUDIO=1; DO_MODEL=1
 NEEDS_REBOOT=0
 NOTES=()
@@ -95,7 +95,7 @@ if [[ $DO_MODEL -eq 1 ]]; then
   if .venv/bin/python - "$WHISPER_MODEL" <<'WARM'
 import sys
 
-from meetnotes import engines
+from localscribe import engines
 
 model = sys.argv[1]
 engine = engines.resolve()
@@ -153,17 +153,17 @@ for d in "$HOME/.local/bin" "$HOME/bin"; do
 done
 if [[ -n "$LINK_DIR" ]]; then
   mkdir -p "$LINK_DIR"
-  ln -sf "$PWD/bin/meetnotes" "$LINK_DIR/meetnotes"
-  ok "linked into $LINK_DIR — just run: meetnotes"
+  ln -sf "$PWD/bin/localscribe" "$LINK_DIR/localscribe"
+  ok "linked into $LINK_DIR — just run: localscribe"
 else
-  warn "No writable PATH directory found. Run it as ./bin/meetnotes, or link it:"
-  echo "        ln -sf $PWD/bin/meetnotes /usr/local/bin/meetnotes"
+  warn "No writable PATH directory found. Run it as ./bin/localscribe, or link it:"
+  echo "        ln -sf $PWD/bin/localscribe /usr/local/bin/localscribe"
 fi
 
 # ----------------------------------------------------------------- 6. check
 bold "Checking the install"
 .venv/bin/python -m pytest tests -q 2>&1 | tail -2
-.venv/bin/meetnotes doctor || true
+.venv/bin/localscribe doctor || true
 
 bold "Done"
 if [[ ${#NOTES[@]} -gt 0 ]]; then
@@ -178,11 +178,11 @@ if [[ $NEEDS_REBOOT -eq 1 ]]; then
     2. + -> Create Multi-Output Device
     3. Tick your headphones AND BlackHole 2ch
     4. Set that Multi-Output Device as the Mac's sound output
-  Then re-run: .venv/bin/meetnotes doctor
+  Then re-run: .venv/bin/localscribe doctor
 MSG
 fi
 cat <<'MSG'
 
   Record your first meeting:
-    meetnotes record --label "Standup"
+    localscribe record --label "Standup"
 MSG

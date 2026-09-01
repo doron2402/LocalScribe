@@ -27,37 +27,37 @@ def _env(name: str, default: str) -> str:
     return os.environ.get(name, default)
 
 
-DATA_DIR = Path(_env("MEETNOTES_DATA_DIR", "~/MeetNotes")).expanduser()
+DATA_DIR = Path(_env("LOCALSCRIBE_DATA_DIR", "~/LocalScribe")).expanduser()
 AUDIO_DIR = DATA_DIR / "audio"
 TRANSCRIPT_DIR = DATA_DIR / "transcripts"
 SUMMARY_DIR = DATA_DIR / "summaries"
 
 # Audio device names. Substring match, case-insensitive.
-MIC_DEVICE = _env("MEETNOTES_MIC_DEVICE", "")            # "" -> system default input
-LOOPBACK_DEVICE = _env("MEETNOTES_LOOPBACK_DEVICE", "BlackHole")
+MIC_DEVICE = _env("LOCALSCRIBE_MIC_DEVICE", "")            # "" -> system default input
+LOOPBACK_DEVICE = _env("LOCALSCRIBE_LOOPBACK_DEVICE", "BlackHole")
 
 SAMPLE_RATE = 16_000  # what Whisper wants; no resample step later
 
 # Speech-to-text engine: auto | faster-whisper | mlx
 # auto picks mlx on Apple Silicon when mlx-whisper is installed (it runs on the
 # Metal GPU, about 2x faster), and faster-whisper everywhere else.
-ENGINE = _env("MEETNOTES_ENGINE", "auto")
+ENGINE = _env("LOCALSCRIBE_ENGINE", "auto")
 
 # Whisper. large-v3-turbo is the best speed/accuracy tradeoff on Apple Silicon
 # and copes well with non-native accents. Smaller: medium.en, small.en, base.en.
-WHISPER_MODEL = _env("MEETNOTES_WHISPER_MODEL", "large-v3-turbo")
-WHISPER_LANG = _env("MEETNOTES_WHISPER_LANG", "en") or None
-WHISPER_COMPUTE = _env("MEETNOTES_WHISPER_COMPUTE", "int8")
+WHISPER_MODEL = _env("LOCALSCRIBE_WHISPER_MODEL", "large-v3-turbo")
+WHISPER_LANG = _env("LOCALSCRIBE_WHISPER_LANG", "en") or None
+WHISPER_COMPUTE = _env("LOCALSCRIBE_WHISPER_COMPUTE", "int8")
 
 # Summarizer: ollama (local LLM) | anthropic (cloud) | extractive (no LLM)
-SUMMARY_BACKEND = _env("MEETNOTES_SUMMARY_BACKEND", "ollama")
+SUMMARY_BACKEND = _env("LOCALSCRIBE_SUMMARY_BACKEND", "ollama")
 OLLAMA_HOST = _env("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
-OLLAMA_MODEL = _env("MEETNOTES_OLLAMA_MODEL", "llama3.1:8b")
+OLLAMA_MODEL = _env("LOCALSCRIBE_OLLAMA_MODEL", "llama3.1:8b")
 # Start the Ollama daemon on demand rather than making it the user's problem.
 # Only ever applies to a local host.
-OLLAMA_AUTOSTART = _env("MEETNOTES_OLLAMA_AUTOSTART", "1").lower() not in ("0", "false", "no")
+OLLAMA_AUTOSTART = _env("LOCALSCRIBE_OLLAMA_AUTOSTART", "1").lower() not in ("0", "false", "no")
 ANTHROPIC_API_KEY = _env("ANTHROPIC_API_KEY", "")
-ANTHROPIC_MODEL = _env("MEETNOTES_ANTHROPIC_MODEL", "claude-sonnet-5")
+ANTHROPIC_MODEL = _env("LOCALSCRIBE_ANTHROPIC_MODEL", "claude-sonnet-5")
 
 
 def ensure_dirs() -> None:

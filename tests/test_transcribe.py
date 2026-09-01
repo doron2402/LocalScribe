@@ -4,8 +4,8 @@ from dataclasses import dataclass
 import numpy as np
 import pytest
 
-from meetnotes import config
-from meetnotes.transcribe import (
+from localscribe import config
+from localscribe.transcribe import (
     Segment,
     Transcript,
     _attribute,
@@ -36,7 +36,7 @@ def two_channel_audio(turns, gain=(0.5, 0.3)):
         audio[a:b, ch] += speech
         if ch == 1:
             audio[a:b, 0] += speech * 0.04   # the mic also hears the speakers
-    from meetnotes.transcribe import _cancel_leak, _norms
+    from localscribe.transcribe import _cancel_leak, _norms
     scored = _cancel_leak(audio, ROLES)
     return scored, _norms(scored)
 
@@ -116,5 +116,5 @@ def test_transcript_round_trip(tmp_path):
 
 @pytest.mark.parametrize("seconds,expected", [(5, "00:05"), (65, "01:05"), (3725, "01:02:05")])
 def test_timestamp_format(seconds, expected):
-    from meetnotes.transcribe import _ts
+    from localscribe.transcribe import _ts
     assert _ts(seconds) == expected

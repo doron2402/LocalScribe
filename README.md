@@ -1,6 +1,6 @@
-# meetnotes
+# LocalScribe
 
-[![CI](https://github.com/doron2402/meetnotes/actions/workflows/ci.yml/badge.svg)](https://github.com/doron2402/meetnotes/actions/workflows/ci.yml)
+[![CI](https://github.com/doron2402/LocalScribe/actions/workflows/ci.yml/badge.svg)](https://github.com/doron2402/LocalScribe/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 
@@ -10,10 +10,43 @@ does either.
 
 ```
 mic ─────────┐
-             ├─► 16 kHz stereo WAV ─► faster-whisper ─► transcript ─► local LLM ─► summary.md
-loopback ────┘   (ch0 = you,          (offline ASR)                   (Ollama)
+             ├─► 16 kHz stereo WAV ─► Whisper ─► transcript ─► local LLM ─► summary.md
+loopback ────┘   (ch0 = you,          (offline)               (Ollama)
                   ch1 = them)
 ```
+
+## Quick start
+
+```bash
+git clone git@github.com:doron2402/LocalScribe.git
+cd LocalScribe
+./scripts/setup.sh
+```
+
+Then record something:
+
+```bash
+localscribe record --label "Standup"
+```
+
+Talk, press `Ctrl-C` when the meeting ends, and wait a few seconds. You get:
+
+```
+~/LocalScribe/audio/standup_2026-09-01_1000.wav          the recording
+~/LocalScribe/transcripts/standup_2026-09-01_1000.md     who said what
+~/LocalScribe/summaries/standup_2026-09-01_1000.md       TL;DR, decisions, action items
+```
+
+Three things worth knowing before your first real meeting:
+
+- **Run `localscribe doctor`.** It tells you what is missing and how to fix it.
+- **Install BlackHole**, or you record only your own voice — not the other
+  participants. `setup.sh` does it, but it needs your password and a reboot.
+  See [System audio](#system-audio-important).
+- **The first run downloads a ~1.6 GB speech model.** `setup.sh` fetches it up
+  front so it doesn't happen mid-meeting.
+
+No server to start, nothing running in the background, no API key, no network.
 
 ## Open-source pieces
 
@@ -27,17 +60,11 @@ loopback ────┘   (ch0 = you,          (offline ASR)                   
 | Summarization | [Ollama](https://github.com/ollama/ollama) + Llama 3.1 | MIT / Llama license |
 | System-audio loopback | [BlackHole](https://github.com/ExistentialAudio/BlackHole) | GPL-3.0 |
 
-## Install
+## What setup.sh does
 
-```bash
-git clone https://github.com/doron2402/meetnotes.git
-cd meetnotes
-./scripts/setup.sh
-```
-
-That one script sets up the virtualenv, installs BlackHole, downloads the
+It sets up the virtualenv, installs BlackHole, downloads the
 Whisper model, installs Ollama and pulls the summarizer model, links a
-`meetnotes` command onto your PATH, then runs the tests and `doctor`. It is
+`localscribe` command onto your PATH, then runs the tests and `doctor`. It is
 safe to re-run; every step checks first.
 
 ```bash
@@ -50,6 +77,7 @@ On Apple Silicon the script insists on an **arm64** Python — an x86_64 one run
 CTranslate2 through Rosetta and transcription takes about 3x longer.
 
 ### System audio (important)
+<a id="system-audio-important"></a>
 
 macOS has no built-in way to record what's coming *out* of your speakers, so
 without a loopback driver you capture only your own microphone — your half of
@@ -60,51 +88,51 @@ the call. After `setup.sh` installs BlackHole and you reboot:
    BlackHole 2ch.
 3. Set that Multi-Output Device as the Mac's sound output.
 
-You still hear the call normally; BlackHole carries a copy that meetnotes reads.
-`meetnotes doctor` tells you whether it found the device.
+You still hear the call normally; BlackHole carries a copy that localscribe reads.
+`localscribe doctor` tells you whether it found the device.
 
 ## Does it need a server?
 
-No. `meetnotes` is a one-shot command: it records, transcribes, summarizes,
+No. LocalScribe is a one-shot command: it records, transcribes, summarizes,
 writes two markdown files and exits. Nothing listens on a port, nothing runs in
 the background between meetings, and none of it needs the network.
 
 The one exception is the local summarizer. Ollama is a daemon on
-`127.0.0.1:11434`, and meetnotes starts it on demand if it isn't already up —
+`127.0.0.1:11434`, and LocalScribe starts it on demand if it isn't already up —
 so it is not something you have to remember either. Set
-`MEETNOTES_OLLAMA_AUTOSTART=0` to manage it yourself, or use
+`LOCALSCRIBE_OLLAMA_AUTOSTART=0` to manage it yourself, or use
 `--backend extractive` and there is no daemon at all.
 
 ## Use
 
-`scripts/setup.sh` links a `meetnotes` command onto your PATH. Otherwise run
-`./bin/meetnotes` from the checkout — same thing, no virtualenv to activate.
+`scripts/setup.sh` links a `localscribe` command onto your PATH. Otherwise run
+`./bin/localscribe` from the checkout — same thing, no virtualenv to activate.
 
 ```bash
-meetnotes doctor                       # check the setup
-meetnotes devices                      # list input devices
+localscribe doctor                       # check the setup
+localscribe devices                      # list input devices
 
 # Record until Ctrl-C, then transcribe and summarize
-meetnotes record --label "Latency sync"
+localscribe record --label "Latency sync"
 
 # Auto-stop after a set time
-meetnotes record --label "Standup" --duration 20m
+localscribe record --label "Standup" --duration 20m
 
 # Re-run an existing recording (e.g. after changing the prompt or model)
-meetnotes process ~/MeetNotes/audio/standup_2026-08-31_1000.wav
+localscribe process ~/LocalScribe/audio/standup_2026-08-31_1000.wav
 
 # Re-summarize a transcript without re-transcribing
-meetnotes summarize ~/MeetNotes/transcripts/standup_2026-08-31_1000.json
+localscribe summarize ~/LocalScribe/transcripts/standup_2026-08-31_1000.json
 
-meetnotes list                         # what you've recorded so far
+localscribe list                         # what you've recorded so far
 ```
 
-Output lands in `~/MeetNotes/{audio,transcripts,summaries}`.
+Output lands in `~/LocalScribe/{audio,transcripts,summaries}`.
 
 ## Who said what
 
 The two audio sources are kept on separate channels — your mic on the left, the
-loopback on the right — so meetnotes labels speakers by comparing per-word
+loopback on the right — so localscribe labels speakers by comparing per-word
 energy across channels instead of running a diarization model. That gives you
 **You** vs **Them**, not individual names, but it is exact, free, and needs no
 gated Hugging Face model. A trailing `?` (`Them?`) marks a word where both
@@ -119,8 +147,8 @@ Two speech engines, same output. `auto` (the default) picks `mlx` when it is
 installed on Apple Silicon and `faster-whisper` everywhere else.
 
 ```bash
-meetnotes process recording.wav --engine mlx             # Metal GPU
-meetnotes process recording.wav --engine faster-whisper  # CPU, runs anywhere
+localscribe process recording.wav --engine mlx             # Metal GPU
+localscribe process recording.wav --engine faster-whisper  # CPU, runs anywhere
 ```
 
 262 seconds of audio, `base.en`, full pipeline including per-word speaker
@@ -153,7 +181,7 @@ within noise. The lever is the GPU, not the language.
 | `large-v3-turbo` | 1.6 GB | ~4x realtime | **default** — best with accents |
 
 ```bash
-meetnotes process recording.wav --model small.en
+localscribe process recording.wav --model small.en
 ```
 
 Speeds above are for the CPU engine; the `mlx` engine is roughly 3x faster than
@@ -175,7 +203,7 @@ is read separately, then the notes are merged.
 ## Development
 
 ```bash
-.venv/bin/pytest          # 58 tests, no audio hardware or model downloads
+.venv/bin/pytest          # 60 tests, no audio hardware or model downloads
 .venv/bin/ruff check .
 ```
 
@@ -185,15 +213,15 @@ recorder's clock-drift handling, engine selection and its fallbacks, and the
 summary post-processing.
 
 ```
-meetnotes/
-├── meetnotes/
+localscribe/
+├── localscribe/
 │   ├── audio.py        capture, resampling, two-clock alignment
 │   ├── engines.py      faster-whisper (CPU) and mlx (Metal GPU), one shape
 │   ├── transcribe.py   speech-to-text + per-word speaker attribution
 │   ├── summarize.py    ollama / anthropic / extractive backends
 │   ├── config.py       env overrides, all optional
 │   └── cli.py          record, process, summarize, devices, doctor, list
-├── bin/meetnotes       launcher: runs the venv's CLI from anywhere
+├── bin/localscribe       launcher: runs the venv's CLI from anywhere
 ├── scripts/setup.sh    one-command install
 └── tests/
 ```

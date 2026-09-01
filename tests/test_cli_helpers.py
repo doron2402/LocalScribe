@@ -2,7 +2,7 @@ import argparse
 
 import pytest
 
-from meetnotes.cli import hms, meter, parse_duration, slugify
+from localscribe.cli import hms, meter, parse_duration, slugify
 
 
 @pytest.mark.parametrize(

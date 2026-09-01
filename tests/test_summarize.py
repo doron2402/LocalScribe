@@ -1,5 +1,5 @@
-from meetnotes.summarize import _chunks, _extractive, normalize_actions
-from meetnotes.transcribe import Segment, Transcript
+from localscribe.summarize import _chunks, _extractive, normalize_actions
+from localscribe.transcribe import Segment, Transcript
 
 
 def _transcript(segments):
@@ -69,14 +69,14 @@ def test_extractive_survives_an_empty_transcript():
 # --- Ollama autostart -------------------------------------------------------
 
 def test_autostart_is_skipped_when_already_running(monkeypatch):
-    from meetnotes import summarize as S
+    from localscribe import summarize as S
     monkeypatch.setattr(S, "ollama_available", lambda: True)
     monkeypatch.setattr(S.shutil, "which", lambda n: (_ for _ in ()).throw(AssertionError("looked for the binary")))
     assert S.ensure_ollama() is True
 
 
 def test_autostart_launches_the_daemon(monkeypatch):
-    from meetnotes import summarize as S
+    from localscribe import summarize as S
     states = iter([False, False, True])
     monkeypatch.setattr(S, "ollama_available", lambda: next(states))
     monkeypatch.setattr(S.shutil, "which", lambda n: "/opt/homebrew/bin/ollama")
@@ -91,14 +91,14 @@ def test_autostart_launches_the_daemon(monkeypatch):
 
 
 def test_autostart_gives_up_when_ollama_is_absent(monkeypatch):
-    from meetnotes import summarize as S
+    from localscribe import summarize as S
     monkeypatch.setattr(S, "ollama_available", lambda: False)
     monkeypatch.setattr(S.shutil, "which", lambda n: None)
     assert S.ensure_ollama() is False
 
 
 def test_a_remote_ollama_is_never_started_locally(monkeypatch):
-    from meetnotes import summarize as S
+    from localscribe import summarize as S
     monkeypatch.setattr(S, "ollama_available", lambda: False)
     monkeypatch.setattr(S.config, "OLLAMA_HOST", "http://gpu-box.local:11434")
     monkeypatch.setattr(S.shutil, "which", lambda n: "/opt/homebrew/bin/ollama")
@@ -106,8 +106,18 @@ def test_a_remote_ollama_is_never_started_locally(monkeypatch):
 
 
 def test_autostart_can_be_turned_off(monkeypatch):
-    from meetnotes import summarize as S
+    from localscribe import summarize as S
     monkeypatch.setattr(S, "ollama_available", lambda: False)
     monkeypatch.setattr(S.config, "OLLAMA_AUTOSTART", False)
     monkeypatch.setattr(S.shutil, "which", lambda n: "/opt/homebrew/bin/ollama")
     assert S.ensure_ollama() is False
+
+
+def test_normalize_actions_formats_the_owner_even_with_a_checkbox_already_there():
+    out = normalize_actions("## Action items\n- [ ] You: write the migration\n")
+    assert out.strip() == "## Action items\n- [ ] **You** — write the migration"
+
+
+def test_normalize_actions_preserves_a_ticked_box():
+    out = normalize_actions("## Action items\n- [x] Ana: shipped it\n")
+    assert out.strip() == "## Action items\n- [x] **Ana** — shipped it"

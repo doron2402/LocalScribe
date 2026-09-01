@@ -1,4 +1,4 @@
-"""meetnotes — record a meeting, transcribe it offline, summarize it."""
+"""localscribe — record a meeting, transcribe it offline, summarize it."""
 from __future__ import annotations
 
 import argparse
@@ -90,7 +90,7 @@ def cmd_doctor(args) -> int:
     from .summarize import ollama_available, ollama_models
 
     ok = True
-    console.print("[bold]meetnotes doctor[/bold]\n")
+    console.print("[bold]localscribe doctor[/bold]\n")
 
     mic, loopback = resolve_devices(args.mic, args.loopback)
     if mic:
@@ -147,7 +147,7 @@ def cmd_doctor(args) -> int:
                     console.print(f"      Installed: {', '.join(models)}")
         elif shutil.which("ollama"):
             console.print("  [green]✓[/green] Ollama installed (not running — "
-                          "meetnotes starts it when it needs it)")
+                          "localscribe starts it when it needs it)")
         else:
             ok = False
             console.print("  [red]✗[/red] Ollama not installed. Run `brew install ollama`, "
@@ -168,11 +168,11 @@ def cmd_doctor(args) -> int:
 def _record(args) -> Path | None:
     mic, loopback = resolve_devices(args.mic, args.loopback)
     if not mic and not loopback:
-        console.print("[red]No usable input device.[/red] Run `meetnotes devices`.")
+        console.print("[red]No usable input device.[/red] Run `localscribe devices`.")
         return None
     if not loopback:
         console.print("[yellow]No system-audio loopback — recording your microphone "
-                      "only.[/yellow] Run `meetnotes doctor` for setup.\n")
+                      "only.[/yellow] Run `localscribe doctor` for setup.\n")
 
     label = args.label or "meeting"
     started = datetime.now()
@@ -353,7 +353,7 @@ def cmd_list(args) -> int:
 # -------------------------------------------------------------------- parser
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="meetnotes", description=__doc__)
+    p = argparse.ArgumentParser(prog="localscribe", description=__doc__)
     sub = p.add_subparsers(dest="command", required=True)
 
     def add_device_args(sp):
