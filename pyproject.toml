@@ -1,0 +1,56 @@
+[project]
+name = "meetnotes"
+version = "0.1.0"
+description = "Record meetings locally, transcribe them offline, summarize them. No audio leaves the machine."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Doron Segal" }]
+keywords = ["whisper", "transcription", "meetings", "summarization", "offline", "macos"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS :: MacOS X",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Sound/Audio :: Capture/Recording",
+    "Topic :: Office/Business",
+]
+dependencies = [
+    "numpy>=1.26",
+    "sounddevice>=0.4.6",   # PortAudio bindings (MIT)
+    "soundfile>=0.12",      # libsndfile bindings (BSD)
+    "soxr>=0.5",            # high-quality resampling (LGPL)
+    "faster-whisper>=1.1",  # CTranslate2 Whisper (MIT)
+    "rich>=13.7",           # terminal UI (MIT)
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.6"]
+
+[project.urls]
+Homepage = "https://github.com/doron2402/meetnotes"
+Issues = "https://github.com/doron2402/meetnotes/issues"
+
+[project.scripts]
+meetnotes = "meetnotes.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["meetnotes"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["E501", "B905"]
