@@ -1,4 +1,4 @@
-"""Offline speech-to-text with faster-whisper (CTranslate2). Nothing leaves the box."""
+"""Offline speech-to-text plus speaker attribution. Nothing leaves the box."""
 from __future__ import annotations
 
 import json
@@ -8,10 +8,9 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
-from . import config
+from . import config, engines
 
 _EPS = 1e-9
-_MODEL_CACHE: dict[tuple, object] = {}
 
 
 @dataclass
@@ -30,6 +29,8 @@ class Transcript:
     duration: float
     language: str
     segments: list[Segment]
+    engine: str = ""
+    model: str = ""
 
     @property
     def text(self) -> str:
@@ -52,12 +53,10 @@ def _ts(seconds: float) -> str:
 
 
 def load_model(name: str | None = None, compute_type: str | None = None):
-    from faster_whisper import WhisperModel
-
-    key = (name or config.WHISPER_MODEL, compute_type or config.WHISPER_COMPUTE)
-    if key not in _MODEL_CACHE:
-        _MODEL_CACHE[key] = WhisperModel(key[0], device="cpu", compute_type=key[1])
-    return _MODEL_CACHE[key]
+    """Warm the faster-whisper model cache (used by setup and tests)."""
+    return engines._load_faster_whisper(
+        name or config.WHISPER_MODEL, compute_type or config.WHISPER_COMPUTE
+    )
 
 
 def sidecar_path(audio_path: Path) -> Path:
@@ -185,6 +184,7 @@ def transcribe(
     audio_path: Path,
     model_name: str | None = None,
     language: str | None = None,
+    engine: str | None = None,
     on_segment=None,
 ) -> Transcript:
     audio_path = Path(audio_path)
@@ -205,17 +205,14 @@ def transcribe(
     scored = _cancel_leak(data, roles)
     norms = _norms(scored)
 
-    model = load_model(model_name)
+    model_name = model_name or config.WHISPER_MODEL
     lang = language if language is not None else config.WHISPER_LANG
     multichannel = data.shape[1] > 1 and len(roles) > 1
-    raw_segments, info = model.transcribe(
-        mono,
-        language=lang,
-        vad_filter=True,
-        vad_parameters={"min_silence_duration_ms": 500},
-        beam_size=5,
-        word_timestamps=multichannel,   # needed to place turn changes precisely
-        condition_on_previous_text=False,  # keeps it from looping on silence
+
+    raw_segments, detected, used_engine = engines.run(
+        mono, model_name, lang,
+        want_words=multichannel,   # needed to place turn changes precisely
+        engine=engine,
     )
 
     segments: list[Segment] = []
@@ -237,14 +234,12 @@ def transcribe(
             on_segment(seg)
 
     for s in raw_segments:
-        if multichannel and getattr(s, "words", None):
+        if multichannel and s.words:
             runs = _split_by_speaker(s.words, scored, roles, norms)
+        elif s.text:
+            runs = [(_attribute(scored, roles, s.start, s.end, norms), s.start, s.end, s.text)]
         else:
-            text = s.text.strip()
-            runs = (
-                [(_attribute(scored, roles, s.start, s.end, norms), s.start, s.end, text)]
-                if text else []
-            )
+            runs = []
         for speaker, start, end, text in runs:
             emit(Segment(round(start, 2), round(end, 2), speaker, text))
 
@@ -253,8 +248,10 @@ def transcribe(
         label=meta.get("label", audio_path.stem),
         started_at=meta.get("started_at", ""),
         duration=round(len(mono) / config.SAMPLE_RATE, 1),
-        language=info.language or (lang or "unknown"),
+        language=detected or (lang or "unknown"),
         segments=segments,
+        engine=used_engine,
+        model=model_name,
     )
 
 
@@ -271,6 +268,7 @@ def write_transcript(t: Transcript, out_dir: Path | None = None) -> tuple[Path, 
         f"- Recorded: {t.started_at or 'unknown'}",
         f"- Duration: {_ts(t.duration)}",
         f"- Language: {t.language}",
+        f"- Transcribed by: {t.engine or 'unknown'} ({t.model or 'unknown'})",
         f"- Audio: `{t.audio_path}`",
         "",
         "---",

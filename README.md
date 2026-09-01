@@ -23,6 +23,7 @@ loopback ────┘   (ch0 = you,          (offline ASR)                   
 | WAV I/O | [soundfile](https://github.com/bastibe/python-soundfile) / libsndfile | BSD-3 |
 | Resampling | [soxr](https://github.com/dofuuz/python-soxr) | LGPL-2.1 |
 | Speech-to-text | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) + CTranslate2 | MIT |
+| Speech-to-text (GPU) | [mlx-whisper](https://github.com/ml-explore/mlx-examples/tree/main/whisper) | MIT |
 | Summarization | [Ollama](https://github.com/ollama/ollama) + Llama 3.1 | MIT / Llama license |
 | System-audio loopback | [BlackHole](https://github.com/ExistentialAudio/BlackHole) | GPL-3.0 |
 
@@ -96,6 +97,36 @@ channels were live and the call was close.
 To get real names, pipe the transcript through the summarizer — an LLM
 generally works them out from how people address each other.
 
+## Engines
+
+Two speech engines, same output. `auto` (the default) picks `mlx` when it is
+installed on Apple Silicon and `faster-whisper` everywhere else.
+
+```bash
+meetnotes process recording.wav --engine mlx             # Metal GPU
+meetnotes process recording.wav --engine faster-whisper  # CPU, runs anywhere
+```
+
+262 seconds of audio, `base.en`, full pipeline including per-word speaker
+attribution, on an M-series Mac:
+
+| Engine | Compute | Wall |
+|---|---|---|
+| faster-whisper (CTranslate2) | CPU int8 | 11.9s |
+| **mlx-whisper** | **Metal GPU** | **4.2s** |
+
+The first `mlx` run in a fresh install takes an extra ~30s while Metal compiles
+its kernels. That is one-off and cached; `scripts/setup.sh` pays it for you so
+it doesn't land on your first real meeting.
+
+Worth knowing if you are considering a rewrite in a compiled language: the host
+language is not what makes this fast. On the same machine and audio, whisper.cpp
+— the C++ engine a Go or Rust port would bind through cgo — takes **10.2s on the
+CPU** and **2.2s on the GPU**, against CTranslate2's 5.7s and MLX's 2.9s for the
+same work. The Python that orchestrates all this costs under 0.1s of the 11.9s
+above; a full pipeline run and its bare speech-to-text call are the same number
+within noise. The lever is the GPU, not the language.
+
 ## Choosing a Whisper model
 
 | Model | Size | Speed (M-series, int8) | When |
@@ -108,6 +139,10 @@ generally works them out from how people address each other.
 ```bash
 meetnotes process recording.wav --model small.en
 ```
+
+Speeds above are for the CPU engine; the `mlx` engine is roughly 3x faster than
+each. A one-hour meeting on `large-v3-turbo` is about 15 minutes on the CPU and
+about 5 on the GPU.
 
 ## Summarizers
 
@@ -124,19 +159,21 @@ is read separately, then the notes are merged.
 ## Development
 
 ```bash
-.venv/bin/pytest          # 40 tests, no audio hardware or model downloads
+.venv/bin/pytest          # 53 tests, no audio hardware or model downloads
 .venv/bin/ruff check .
 ```
 
 The tests cover the parts that fail silently rather than loudly: speaker
 attribution (turn splitting, mic bleed, gain differences, crosstalk), the
-recorder's clock-drift handling, and the summary post-processing.
+recorder's clock-drift handling, engine selection and its fallbacks, and the
+summary post-processing.
 
 ```
 meetnotes/
 ├── meetnotes/
 │   ├── audio.py        capture, resampling, two-clock alignment
-│   ├── transcribe.py   faster-whisper + per-word speaker attribution
+│   ├── engines.py      faster-whisper (CPU) and mlx (Metal GPU), one shape
+│   ├── transcribe.py   speech-to-text + per-word speaker attribution
 │   ├── summarize.py    ollama / anthropic / extractive backends
 │   ├── config.py       env overrides, all optional
 │   └── cli.py          record, process, summarize, devices, doctor, list

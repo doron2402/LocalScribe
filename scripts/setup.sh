@@ -54,15 +54,21 @@ if [[ -z "$PY" ]]; then
 fi
 ok "using $PY ($("$PY" -c 'import platform;print(platform.machine())'))"
 
+# Metal-accelerated speech-to-text is Apple-Silicon only, and about 3x faster.
+EXTRAS="dev"
+if [[ "$(uname -s)" == "Darwin" && "$(uname -m)" == "arm64" ]]; then
+  EXTRAS="dev,mlx"
+fi
+
 if command -v uv >/dev/null; then
   uv venv --python "$PY" --allow-existing >/dev/null
-  uv pip install -q -e ".[dev]"
+  uv pip install -q -e ".[$EXTRAS]"
 else
   "$PY" -m venv --upgrade-deps .venv 2>/dev/null || "$PY" -m venv .venv
   .venv/bin/pip install -q --upgrade pip
-  .venv/bin/pip install -q -e ".[dev]"
+  .venv/bin/pip install -q -e ".[$EXTRAS]"
 fi
-ok "installed into .venv"
+ok "installed into .venv (extras: $EXTRAS)"
 
 # ------------------------------------------------------- 2. system audio
 if [[ $DO_AUDIO -eq 1 && "$(uname -s)" == "Darwin" ]]; then
@@ -86,11 +92,19 @@ fi
 if [[ $DO_MODEL -eq 1 ]]; then
   bold "Speech model ($WHISPER_MODEL)"
   echo "    Downloading if absent — large-v3-turbo is about 1.6 GB."
-  if .venv/bin/python - "$WHISPER_MODEL" <<'PY'
+  if .venv/bin/python - "$WHISPER_MODEL" <<'WARM'
 import sys
-from faster_whisper import WhisperModel
-WhisperModel(sys.argv[1], device="cpu", compute_type="int8")
-PY
+
+from meetnotes import engines
+
+model = sys.argv[1]
+engine = engines.resolve()
+# One second of silence: downloads the weights, and on the mlx engine also
+# pays the one-off Metal kernel compilation that would otherwise land on
+# the user's first real meeting.
+engines.run([0.0] * 16000, model, "en", True, engine=engine)
+print(f"    warmed {model} on {engine}")
+WARM
   then ok "$WHISPER_MODEL ready"
   else warn "Could not fetch $WHISPER_MODEL — it will download on first use."
   fi

@@ -38,6 +38,11 @@ LOOPBACK_DEVICE = _env("MEETNOTES_LOOPBACK_DEVICE", "BlackHole")
 
 SAMPLE_RATE = 16_000  # what Whisper wants; no resample step later
 
+# Speech-to-text engine: auto | faster-whisper | mlx
+# auto picks mlx on Apple Silicon when mlx-whisper is installed (it runs on the
+# Metal GPU, about 2x faster), and faster-whisper everywhere else.
+ENGINE = _env("MEETNOTES_ENGINE", "auto")
+
 # Whisper. large-v3-turbo is the best speed/accuracy tradeoff on Apple Silicon
 # and copes well with non-native accents. Smaller: medium.en, small.en, base.en.
 WHISPER_MODEL = _env("MEETNOTES_WHISPER_MODEL", "large-v3-turbo")

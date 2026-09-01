@@ -15,7 +15,7 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
-from . import config
+from . import config, engines
 from .audio import Recorder, default_input, find_device, list_input_devices
 
 console = Console()
@@ -105,6 +105,23 @@ def cmd_doctor(args) -> int:
             f"'{config.LOOPBACK_DEVICE}'. You will record [bold]only your own "
             f"voice[/bold]. See README → System audio."
         )
+
+    try:
+        engine = engines.resolve(args.engine)
+        if engine == "mlx":
+            console.print("  [green]✓[/green] Engine: mlx (Metal GPU, ~2x faster)")
+        elif engines.mlx_available():
+            console.print("  [green]✓[/green] Engine: faster-whisper (CPU)")
+        else:
+            console.print("  [green]✓[/green] Engine: faster-whisper (CPU)")
+            import platform
+            if platform.system() == "Darwin" and platform.machine() == "arm64":
+                console.print("  [yellow]![/yellow] mlx-whisper not installed — this Mac "
+                              "could transcribe ~2x faster. Run: "
+                              r"uv pip install -e '.\[mlx]'")
+    except engines.EngineError as e:
+        ok = False
+        console.print(f"  [red]✗[/red] {e}")
 
     model_dir = Path("~/.cache/huggingface/hub").expanduser()
     cached = list(model_dir.glob(f"*{config.WHISPER_MODEL}*")) if model_dir.exists() else []
@@ -223,10 +240,17 @@ def _process(audio_path: Path, args) -> int:
     from .summarize import SummaryError, summarize, write_summary
     from .transcribe import transcribe, write_transcript
 
-    with console.status(f"Transcribing with Whisper ({args.model or config.WHISPER_MODEL})…"):
-        t = transcribe(audio_path, model_name=args.model, language=args.language)
+    try:
+        engine = engines.resolve(getattr(args, "engine", None))
+    except engines.EngineError as e:
+        console.print(f"[red]{e}[/red]")
+        return 1
+
+    label = f"{args.model or config.WHISPER_MODEL} via {engine}"
+    with console.status(f"Transcribing ({label})…"):
+        t = transcribe(audio_path, model_name=args.model, language=args.language, engine=engine)
     md, js = write_transcript(t)
-    console.print(f"[green]Transcript[/green] {len(t.segments)} segments → {md}")
+    console.print(f"[green]Transcript[/green] {len(t.segments)} segments, {label} → {md}")
 
     if not t.segments:
         console.print("[yellow]Nothing was transcribed — skipping the summary.[/yellow]")
@@ -333,6 +357,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     def add_pipeline_args(sp):
         sp.add_argument("--model", help=f"Whisper model (default {config.WHISPER_MODEL})")
+        sp.add_argument("--engine", choices=list(engines.ENGINES),
+                        help=f"speech engine (default {config.ENGINE}; mlx uses the "
+                             f"Metal GPU and is ~2x faster on Apple Silicon)")
         sp.add_argument("--language", help="force a language code, e.g. en, he, es")
         sp.add_argument("--backend", choices=["ollama", "anthropic", "extractive"],
                         help=f"summarizer (default {config.SUMMARY_BACKEND})")
@@ -344,6 +371,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser("doctor", help="check the setup")
     add_device_args(sp)
+    sp.add_argument("--engine", choices=list(engines.ENGINES))
     sp.add_argument("--backend", choices=["ollama", "anthropic", "extractive"])
     sp.set_defaults(func=cmd_doctor)
 
