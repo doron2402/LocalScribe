@@ -4,6 +4,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 
+**English** · [עברית](README.he.md) · [Español](README.es.md) · [简体中文](README.zh-CN.md) · [Français](README.fr.md)
+
 Records a meeting on your Mac, transcribes it, and summarizes it — all on the
 machine. No audio ever leaves the box, and with the default summarizer no text
 does either.
@@ -225,6 +227,15 @@ localscribe/
 ├── scripts/setup.sh    one-command install
 └── tests/
 ```
+
+## Translations
+
+[עברית](README.he.md) · [Español](README.es.md) · [简体中文](README.zh-CN.md) · [Français](README.fr.md)
+
+This English README is the canonical one. Translations are kept in sync by hand,
+so if one disagrees with this file, this file is right. Corrections and new
+languages are welcome — copy `README.md`, translate the prose, and leave the
+commands, paths and flags exactly as they are.
 
 ## Before you record other people
 
