@@ -173,12 +173,25 @@ localscribe list                         # מה הוקלט עד עכשיו
 
 ## שמירה ומחיקה
 
-ההקלטות נמחקות אחרי **30 יום**. התמלולים והסיכומים שנוצרו מהן נשמרים — הם
-קטנטנים, והם הסיבה שהקלטתם מלכתחילה. השמע הוא מה שמצטבר (בערך 60 מגה‑בייט לשעה)
-והוא זה שמכיל את הקולות של אנשים אחרים, ולכן הוא החלק שעל שעון.
+</div>
 
-קבצים ישנים נסרקים בתחילת כל `record` ו‑`process`, כך שהמדיניות פועלת בלי cron.
-אפשר גם להריץ ידנית:
+<div dir="rtl">
+
+**ההקלטה נמחקת ברגע שהסיכום נכתב.** התמלול והסיכום נשמרים — הם מה שבאמת רציתם,
+והם קטנים פי אלפי מונים מהשמע. שמרו הקלטה כשאתם מתכננים לתמלל אותה שוב בעתיד
+עם מודל טוב יותר:
+
+</div>
+
+```bash
+localscribe record --label "Standup" --keep-audio
+```
+
+<div dir="rtl">
+
+כל מה שלא קיבל סיכום — `--no-summary`, `--keep-audio`, או ריצה שנכשלה באמצע —
+נסרק אחרי **30 יום** כרשת ביטחון. הסריקה קורית בתחילת כל `record` ו‑`process`,
+כך שהמדיניות פועלת בלי cron, ואפשר גם ידנית:
 
 </div>
 
@@ -190,21 +203,22 @@ localscribe prune --all --days 90        # expire the notes too, after 90 days
 
 <div dir="rtl">
 
-לשינוי ברירות המחדל ב‑`.env`:
+לשינוי הכול ב‑`.env`:
 
 </div>
 
 ```bash
+LOCALSCRIBE_DELETE_AUDIO_AFTER_SUMMARY=0 # keep recordings; let the window below decide
 LOCALSCRIBE_RETENTION_DAYS=7             # audio; 0 keeps it forever
 LOCALSCRIBE_RETENTION_TRANSCRIPTS=90     # 0 by default, meaning keep
-LOCALSCRIBE_RETENTION_SUMMARIES=0
 ```
 
 <div dir="rtl">
 
-המחיקה סופית — אין אשפה ואין ביטול. היא מכוונת בכוונה לצמצום: רק בתוך התיקיות של
-LocalScribe עצמו, רק סוגי הקבצים שהוא כותב, ולעולם לא דרך קישור סמלי, כך שקובץ
-זר שהנחתם שם מוגן.
+המחיקה סופית — אין אשפה ואין ביטול — ולכן היא מכוונת בכוונה לצמצום: רק בתוך
+התיקיות של LocalScribe עצמו, רק סוגי הקבצים שהוא כותב, ולעולם לא דרך קישור סמלי.
+במיוחד, `localscribe process ~/Downloads/interview.wav` מסכם את הקובץ ומשאיר
+אותו בדיוק במקומו; רק הקלטות ש‑LocalScribe יצר בעצמו נמחקות אי פעם.
 
 ## מי אמר מה
 

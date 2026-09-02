@@ -45,6 +45,15 @@ SYSTEM_AUDIO = _env("LOCALSCRIBE_SYSTEM_AUDIO", "auto")
 # How long to keep things, in days. Zero or less keeps them forever.
 # Audio expires because it is large and it is other people's voices; the notes
 # taken from it are small and are the point, so they are kept by default.
+# Drop the recording as soon as its summary exists. The transcript and summary
+# are what you keep; the audio has done its job. Turn this off if you expect to
+# re-transcribe later with a better model.
+DELETE_AUDIO_AFTER_SUMMARY = _env(
+    "LOCALSCRIBE_DELETE_AUDIO_AFTER_SUMMARY", "1"
+).lower() not in ("0", "false", "no")
+
+# Backstop for recordings that never got summarized: --no-summary, --keep-audio,
+# or a run that failed partway.
 RETENTION_DAYS = int(_env("LOCALSCRIBE_RETENTION_DAYS", "30"))
 RETENTION_TRANSCRIPTS = int(_env("LOCALSCRIBE_RETENTION_TRANSCRIPTS", "0"))
 RETENTION_SUMMARIES = int(_env("LOCALSCRIBE_RETENTION_SUMMARIES", "0"))

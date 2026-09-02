@@ -108,6 +108,40 @@ def prune(overrides: dict[str, int] | None = None, dry_run: bool = False,
     return sweep
 
 
+def delete_recording(audio_path: Path) -> int:
+    """Delete one recording and its sidecar. Returns bytes freed, 0 if refused.
+
+    Only ever touches files LocalScribe itself recorded. `process` is routinely
+    pointed at audio elsewhere on disk — someone's only copy of an interview —
+    and that must never be destroyed as a side effect of summarizing it.
+    """
+    audio_path = Path(audio_path)
+    try:
+        home = config.AUDIO_DIR.resolve()
+        target = audio_path.resolve()
+    except OSError:
+        return 0
+
+    if audio_path.is_symlink():
+        return 0
+    if target.parent != home:
+        return 0
+    if target.suffix.lower() != ".wav" or not target.is_file():
+        return 0
+
+    freed = 0
+    for path in (target, target.with_suffix(".json")):
+        if not path.is_file() or path.is_symlink():
+            continue
+        try:
+            size = path.stat().st_size
+            path.unlink()
+            freed += size
+        except OSError:
+            continue
+    return freed
+
+
 def describe(sweep: Sweep) -> str:
     if not sweep:
         return ""

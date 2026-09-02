@@ -151,14 +151,20 @@ Les fichiers sont écrits dans `~/LocalScribe/{audio,transcripts,summaries}`.
 
 ## Conserver et supprimer
 
-Les enregistrements sont supprimés au bout de **30 jours**. Les transcriptions
-et les résumés qui en sont tirés sont conservés : ils sont minuscules, et ce sont
-eux la raison de l'enregistrement. C'est l'audio qui s'accumule (environ 60 Mo
-par heure) et qui porte la voix des autres, donc c'est lui qui a une échéance.
+**L'enregistrement est supprimé dès que son résumé est écrit.** La transcription
+et le résumé sont conservés : c'est ce que vous vouliez vraiment, et c'est des
+milliers de fois plus petit que l'audio. Gardez un enregistrement si vous
+comptez le retranscrire plus tard avec un meilleur modèle :
 
-Les vieux fichiers sont balayés au début de chaque `record` et de chaque
-`process`, si bien que la règle s'applique sans aucun cron. On peut aussi le
-faire à la main :
+```bash
+localscribe record --label "Standup" --keep-audio
+```
+
+Tout ce qui n'a jamais eu de résumé — `--no-summary`, `--keep-audio`, ou une
+exécution interrompue — est balayé au bout de **30 jours**, en filet de
+sécurité. Ce balayage a lieu au début de chaque `record` et de chaque `process`,
+si bien que la règle s'applique sans aucun cron. On peut aussi le faire à la
+main :
 
 ```bash
 localscribe prune --dry-run              # show what would go, delete nothing
@@ -166,18 +172,20 @@ localscribe prune                        # delete it
 localscribe prune --all --days 90        # expire the notes too, after 90 days
 ```
 
-Pour changer les valeurs par défaut, dans `.env` :
+Pour changer l'un ou l'autre, dans `.env` :
 
 ```bash
+LOCALSCRIBE_DELETE_AUDIO_AFTER_SUMMARY=0 # keep recordings; let the window below decide
 LOCALSCRIBE_RETENTION_DAYS=7             # audio; 0 keeps it forever
 LOCALSCRIBE_RETENTION_TRANSCRIPTS=90     # 0 by default, meaning keep
-LOCALSCRIBE_RETENTION_SUMMARIES=0
 ```
 
-La suppression est définitive : ni corbeille, ni annulation. Elle est
+La suppression est définitive — ni corbeille, ni annulation — donc elle est
 volontairement étroite dans ce qu'elle touche : uniquement dans les répertoires
 de LocalScribe, uniquement les types de fichiers qu'il écrit, et jamais à travers
-un lien symbolique — un fichier étranger que vous y déposez ne risque rien.
+un lien symbolique. En particulier, `localscribe process ~/Downloads/interview.wav`
+résume ce fichier et le laisse exactement où il est ; seuls les enregistrements
+faits par LocalScribe lui-même sont supprimés.
 
 ## Qui a dit quoi
 

@@ -150,13 +150,19 @@ La salida se escribe en `~/LocalScribe/{audio,transcripts,summaries}`.
 
 ## Conservar y borrar
 
-Las grabaciones se borran a los **30 días**. Las transcripciones y los resúmenes
-hechos a partir de ellas se conservan: son diminutos y son la razón por la que
-grabaste. El audio es lo que se acumula (unos 60 MB por hora) y lo que contiene
-las voces de otras personas, así que es la parte con reloj.
+**La grabación se borra en cuanto se escribe su resumen.** La transcripción y el
+resumen se conservan: son lo que realmente querías y son miles de veces más
+pequeños que el audio. Conserva una grabación cuando esperes volver a
+transcribirla más adelante con un modelo mejor:
 
-Los archivos viejos se barren al empezar cada `record` y cada `process`, de modo
-que la política se aplica sin ningún cron. También puedes hacerlo a mano:
+```bash
+localscribe record --label "Standup" --keep-audio
+```
+
+Todo lo que nunca llegó a tener resumen — `--no-summary`, `--keep-audio` o una
+ejecución que falló a medias — se barre a los **30 días** como red de seguridad.
+Ese barrido ocurre al empezar cada `record` y cada `process`, así que la política
+se aplica sin ningún cron. También puedes hacerlo a mano:
 
 ```bash
 localscribe prune --dry-run              # show what would go, delete nothing
@@ -164,18 +170,20 @@ localscribe prune                        # delete it
 localscribe prune --all --days 90        # expire the notes too, after 90 days
 ```
 
-Cambia los valores por defecto en `.env`:
+Cambia lo que quieras en `.env`:
 
 ```bash
+LOCALSCRIBE_DELETE_AUDIO_AFTER_SUMMARY=0 # keep recordings; let the window below decide
 LOCALSCRIBE_RETENTION_DAYS=7             # audio; 0 keeps it forever
 LOCALSCRIBE_RETENTION_TRANSCRIPTS=90     # 0 by default, meaning keep
-LOCALSCRIBE_RETENTION_SUMMARIES=0
 ```
 
-El borrado es permanente: no hay papelera ni deshacer. Es deliberadamente
-estrecho en lo que toca: solo dentro de los directorios de LocalScribe, solo los
-tipos de archivo que él escribe y nunca a través de un enlace simbólico, así que
-un archivo ajeno que dejes ahí está a salvo.
+El borrado es permanente —no hay papelera ni deshacer— así que es
+deliberadamente estrecho en lo que toca: solo dentro de los directorios de
+LocalScribe, solo los tipos de archivo que él escribe y nunca a través de un
+enlace simbólico. En particular, `localscribe process ~/Downloads/interview.wav`
+resume ese archivo y lo deja exactamente donde está; solo se borran las
+grabaciones que hizo el propio LocalScribe.
 
 ## Quién dijo qué
 

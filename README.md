@@ -152,13 +152,19 @@ Output lands in `~/LocalScribe/{audio,transcripts,summaries}`.
 
 ## Keeping and deleting
 
-Recordings are deleted after **30 days**. The transcripts and summaries made
-from them are kept — they are tiny, and they are the reason you recorded
-anything. Audio is what piles up (roughly 60 MB an hour) and what carries other
-people's voices, so it is the part on a timer.
+**The recording is deleted as soon as its summary is written.** The transcript
+and summary are kept — they are what you actually wanted, and they are thousands
+of times smaller than the audio. Keep a recording when you expect to
+re-transcribe it later with a better model:
 
-Old files are swept at the start of every `record` and `process`, so the policy
-runs without a cron job. You can also do it by hand:
+```bash
+localscribe record --label "Standup" --keep-audio
+```
+
+Anything that never got a summary — `--no-summary`, `--keep-audio`, or a run
+that failed partway — is swept after **30 days** as a backstop. That sweep
+happens at the start of every `record` and `process`, so the policy runs without
+a cron job, and you can also do it by hand:
 
 ```bash
 localscribe prune --dry-run              # show what would go, delete nothing
@@ -166,18 +172,19 @@ localscribe prune                        # delete it
 localscribe prune --all --days 90        # expire the notes too, after 90 days
 ```
 
-Change the defaults in `.env`:
+Change any of it in `.env`:
 
 ```bash
+LOCALSCRIBE_DELETE_AUDIO_AFTER_SUMMARY=0 # keep recordings; let the window below decide
 LOCALSCRIBE_RETENTION_DAYS=7             # audio; 0 keeps it forever
 LOCALSCRIBE_RETENTION_TRANSCRIPTS=90     # 0 by default, meaning keep
-LOCALSCRIBE_RETENTION_SUMMARIES=0
 ```
 
-Deletion is permanent — there is no trash and no undo. It is deliberately narrow
-about what it will touch: only inside LocalScribe's own directories, only the
-file types it writes, and never through a symlink, so a stray file you put there
-is safe.
+Deletion is permanent — there is no trash and no undo — so it is deliberately
+narrow about what it will touch: only inside LocalScribe's own directories, only
+the file types it writes, and never through a symlink. In particular,
+`localscribe process ~/Downloads/interview.wav` summarizes that file and leaves
+it exactly where it is; only recordings LocalScribe made itself are ever deleted.
 
 ## Who said what
 

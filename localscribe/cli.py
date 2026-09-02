@@ -356,6 +356,16 @@ def _process(audio_path: Path, args) -> int:
 
     path = write_summary(t, summary, backend)
     console.print(f"[green]Summary[/green] → {path}\n")
+
+    # The notes are on disk now, so the recording has done its job.
+    if config.DELETE_AUDIO_AFTER_SUMMARY and not getattr(args, "keep_audio", False):
+        freed = retention.delete_recording(audio_path)
+        if freed:
+            console.print(
+                f"[dim]Deleted the recording ({freed / 1e6:.1f} MB); the transcript "
+                f"and summary are kept.[/dim]\n"
+            )
+
     console.print(Markdown(summary))
     return 0
 
@@ -500,6 +510,9 @@ def build_parser() -> argparse.ArgumentParser:
                         help=f"summarizer (default {config.SUMMARY_BACKEND})")
         sp.add_argument("--summary-model", help="model name for the chosen backend")
         sp.add_argument("--no-summary", action="store_true", help="transcribe only")
+        sp.add_argument("--keep-audio", action="store_true",
+                        help="keep the recording after summarizing "
+                             f"(default: {'delete it' if config.DELETE_AUDIO_AFTER_SUMMARY else 'keep it'})")
 
     sp = sub.add_parser("devices", help="list audio input devices")
     sp.set_defaults(func=cmd_devices)

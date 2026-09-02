@@ -150,3 +150,58 @@ def test_uses_real_clock_by_default(store):
     write(store["audio"], "old.wav", 0)
     os.utime(store["audio"] / "old.wav", (time.time() - 60 * DAY,) * 2)
     assert retention.prune().count == 1
+
+
+# --- deleting a recording once its summary exists ---------------------------
+
+def test_recording_and_sidecar_are_deleted(store):
+    wav = write(store["audio"], "standup.wav", 0, content=b"a" * 5000)
+    side = write(store["audio"], "standup.json", 0, content=b"{}")
+    freed = retention.delete_recording(wav)
+    assert not wav.exists() and not side.exists()
+    assert freed == 5002
+
+
+def test_a_missing_sidecar_is_fine(store):
+    wav = write(store["audio"], "standup.wav", 0, content=b"a" * 100)
+    assert retention.delete_recording(wav) == 100
+
+
+def test_audio_outside_the_data_directory_is_never_deleted(store, tmp_path):
+    """`process` is routinely pointed at someone's only copy of a file."""
+    elsewhere = tmp_path / "Downloads"
+    elsewhere.mkdir()
+    theirs = elsewhere / "interview.wav"
+    theirs.write_bytes(b"irreplaceable")
+
+    assert retention.delete_recording(theirs) == 0
+    assert theirs.exists()
+
+
+def test_a_symlink_in_the_audio_directory_is_never_followed(store, tmp_path):
+    outside = tmp_path / "precious.wav"
+    outside.write_bytes(b"not ours")
+    link = store["audio"] / "link.wav"
+    link.symlink_to(outside)
+
+    assert retention.delete_recording(link) == 0
+    assert outside.exists()
+
+
+def test_a_nested_path_under_the_audio_directory_is_refused(store):
+    nested = store["audio"] / "sub"
+    nested.mkdir()
+    wav = nested / "deep.wav"
+    wav.write_bytes(b"x")
+    assert retention.delete_recording(wav) == 0
+    assert wav.exists()
+
+
+def test_only_wav_files_are_deleted(store):
+    other = write(store["audio"], "notes.txt", 0)
+    assert retention.delete_recording(other) == 0
+    assert other.exists()
+
+
+def test_deleting_something_that_is_already_gone_is_harmless(store):
+    assert retention.delete_recording(store["audio"] / "never-existed.wav") == 0
