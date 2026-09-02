@@ -42,6 +42,13 @@ LOOPBACK_DEVICE = _env("LOCALSCRIBE_LOOPBACK_DEVICE", "BlackHole")
 #   off    microphone only
 SYSTEM_AUDIO = _env("LOCALSCRIBE_SYSTEM_AUDIO", "auto")
 
+# How long to keep things, in days. Zero or less keeps them forever.
+# Audio expires because it is large and it is other people's voices; the notes
+# taken from it are small and are the point, so they are kept by default.
+RETENTION_DAYS = int(_env("LOCALSCRIBE_RETENTION_DAYS", "30"))
+RETENTION_TRANSCRIPTS = int(_env("LOCALSCRIBE_RETENTION_TRANSCRIPTS", "0"))
+RETENTION_SUMMARIES = int(_env("LOCALSCRIBE_RETENTION_SUMMARIES", "0"))
+
 SAMPLE_RATE = 16_000  # what Whisper wants; no resample step later
 
 # Speech-to-text engine: auto | faster-whisper | mlx

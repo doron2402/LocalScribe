@@ -16,7 +16,7 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
-from . import config, engines, systemaudio
+from . import config, engines, retention, systemaudio
 from .audio import Recorder, default_input, find_device, list_input_devices
 
 console = Console()
@@ -360,7 +360,22 @@ def _process(audio_path: Path, args) -> int:
     return 0
 
 
+def auto_prune() -> None:
+    """Expire old files as a side effect of normal use.
+
+    A retention policy that needs a cron job is a retention policy that does not
+    run, so every recording and reprocess sweeps first.
+    """
+    try:
+        sweep = retention.prune()
+    except OSError:
+        return
+    if sweep:
+        console.print(f"[dim]Retention: {retention.describe(sweep)}.[/dim]")
+
+
 def cmd_record(args) -> int:
+    auto_prune()
     audio_path = _record(args)
     if audio_path is None:
         return 1
@@ -370,6 +385,7 @@ def cmd_record(args) -> int:
 
 
 def cmd_process(args) -> int:
+    auto_prune()
     path = Path(args.audio).expanduser()
     if not path.exists():
         console.print(f"[red]No such file:[/red] {path}")
@@ -396,6 +412,44 @@ def cmd_summarize(args) -> int:
     out = write_summary(t, summary, backend)
     console.print(f"[green]Summary[/green] → {out}\n")
     console.print(Markdown(summary))
+    return 0
+
+
+def cmd_prune(args) -> int:
+    overrides = {}
+    if args.days is not None:
+        overrides["audio"] = args.days
+        if args.all:
+            overrides["transcripts"] = args.days
+            overrides["summaries"] = args.days
+    elif args.all:
+        days = config.RETENTION_DAYS
+        overrides = {"audio": days, "transcripts": days, "summaries": days}
+
+    days = retention.policy(overrides)
+    table = Table(title="Retention", header_style="bold")
+    table.add_column("What")
+    table.add_column("Kept for")
+    table.add_column("Expired now", justify="right")
+    for category, keep in days.items():
+        count = len(retention.expired(category, keep))
+        table.add_row(
+            category,
+            "forever" if keep <= 0 else f"{keep} days",
+            str(count) if count else "[grey42]—[/grey42]",
+        )
+    console.print(table)
+
+    sweep = retention.prune(overrides, dry_run=args.dry_run)
+    if not sweep:
+        console.print("Nothing to delete.")
+        return 0
+    for path in sweep.removed:
+        console.print(f"  [grey42]{path}[/grey42]")
+    console.print(
+        f"[yellow]{retention.describe(sweep)}[/yellow]"
+        + ("  [dim](dry run — nothing was touched)[/dim]" if args.dry_run else "")
+    )
     return 0
 
 
@@ -477,6 +531,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser("list", help="list past meetings")
     sp.set_defaults(func=cmd_list)
+
+    sp = sub.add_parser("prune", help="delete recordings past their retention window")
+    sp.add_argument("--days", type=int,
+                    help=f"override the window (default {config.RETENTION_DAYS}; 0 keeps forever)")
+    sp.add_argument("--all", action="store_true",
+                    help="expire transcripts and summaries too, not just audio")
+    sp.add_argument("--dry-run", action="store_true", help="list what would go, delete nothing")
+    sp.set_defaults(func=cmd_prune)
     return p
 
 

@@ -148,6 +148,35 @@ localscribe list                         # qué has grabado hasta ahora
 
 La salida se escribe en `~/LocalScribe/{audio,transcripts,summaries}`.
 
+## Conservar y borrar
+
+Las grabaciones se borran a los **30 días**. Las transcripciones y los resúmenes
+hechos a partir de ellas se conservan: son diminutos y son la razón por la que
+grabaste. El audio es lo que se acumula (unos 60 MB por hora) y lo que contiene
+las voces de otras personas, así que es la parte con reloj.
+
+Los archivos viejos se barren al empezar cada `record` y cada `process`, de modo
+que la política se aplica sin ningún cron. También puedes hacerlo a mano:
+
+```bash
+localscribe prune --dry-run              # show what would go, delete nothing
+localscribe prune                        # delete it
+localscribe prune --all --days 90        # expire the notes too, after 90 days
+```
+
+Cambia los valores por defecto en `.env`:
+
+```bash
+LOCALSCRIBE_RETENTION_DAYS=7             # audio; 0 keeps it forever
+LOCALSCRIBE_RETENTION_TRANSCRIPTS=90     # 0 by default, meaning keep
+LOCALSCRIBE_RETENTION_SUMMARIES=0
+```
+
+El borrado es permanente: no hay papelera ni deshacer. Es deliberadamente
+estrecho en lo que toca: solo dentro de los directorios de LocalScribe, solo los
+tipos de archivo que él escribe y nunca a través de un enlace simbólico, así que
+un archivo ajeno que dejes ahí está a salvo.
+
 ## Quién dijo qué
 
 Las dos fuentes de audio se guardan en canales separados — tu micrófono en el

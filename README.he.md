@@ -171,6 +171,41 @@ localscribe list                         # מה הוקלט עד עכשיו
 
 הפלט נכתב ל‑`~/LocalScribe/{audio,transcripts,summaries}`.
 
+## שמירה ומחיקה
+
+ההקלטות נמחקות אחרי **30 יום**. התמלולים והסיכומים שנוצרו מהן נשמרים — הם
+קטנטנים, והם הסיבה שהקלטתם מלכתחילה. השמע הוא מה שמצטבר (בערך 60 מגה‑בייט לשעה)
+והוא זה שמכיל את הקולות של אנשים אחרים, ולכן הוא החלק שעל שעון.
+
+קבצים ישנים נסרקים בתחילת כל `record` ו‑`process`, כך שהמדיניות פועלת בלי cron.
+אפשר גם להריץ ידנית:
+
+</div>
+
+```bash
+localscribe prune --dry-run              # show what would go, delete nothing
+localscribe prune                        # delete it
+localscribe prune --all --days 90        # expire the notes too, after 90 days
+```
+
+<div dir="rtl">
+
+לשינוי ברירות המחדל ב‑`.env`:
+
+</div>
+
+```bash
+LOCALSCRIBE_RETENTION_DAYS=7             # audio; 0 keeps it forever
+LOCALSCRIBE_RETENTION_TRANSCRIPTS=90     # 0 by default, meaning keep
+LOCALSCRIBE_RETENTION_SUMMARIES=0
+```
+
+<div dir="rtl">
+
+המחיקה סופית — אין אשפה ואין ביטול. היא מכוונת בכוונה לצמצום: רק בתוך התיקיות של
+LocalScribe עצמו, רק סוגי הקבצים שהוא כותב, ולעולם לא דרך קישור סמלי, כך שקובץ
+זר שהנחתם שם מוגן.
+
 ## מי אמר מה
 
 שני מקורות השמע נשמרים בערוצים נפרדים — המיקרופון שלכם בערוץ השמאלי ושמע

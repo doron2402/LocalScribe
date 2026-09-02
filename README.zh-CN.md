@@ -139,6 +139,33 @@ localscribe list                         # 目前录制过的内容
 
 输出写入 `~/LocalScribe/{audio,transcripts,summaries}`。
 
+## 保留与删除
+
+录音会在 **30 天**后删除。由录音生成的转写与摘要会被保留——它们体积极小，而且
+正是你当初录制的目的。占空间的是音频（每小时约 60 MB），承载他人声音的也是
+音频，所以只有它有保留期限。
+
+每次 `record` 和 `process` 开始时都会清理过期文件，因此这套策略不需要 cron 也会
+生效。你也可以手动执行：
+
+```bash
+localscribe prune --dry-run              # show what would go, delete nothing
+localscribe prune                        # delete it
+localscribe prune --all --days 90        # expire the notes too, after 90 days
+```
+
+在 `.env` 中修改默认值：
+
+```bash
+LOCALSCRIBE_RETENTION_DAYS=7             # audio; 0 keeps it forever
+LOCALSCRIBE_RETENTION_TRANSCRIPTS=90     # 0 by default, meaning keep
+LOCALSCRIBE_RETENTION_SUMMARIES=0
+```
+
+删除是永久性的——没有回收站，也无法撤销。它对可以触碰的范围有意做得很窄：只在
+LocalScribe 自己的目录内，只处理它自己写入的文件类型，并且绝不跟随符号链接，
+所以你放在那里的其他文件是安全的。
+
 ## 谁说了哪句话
 
 两路音频分别保存在不同声道——你的麦克风在左声道，系统音频在右声道——因此

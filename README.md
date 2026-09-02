@@ -150,6 +150,35 @@ localscribe list                         # what you've recorded so far
 
 Output lands in `~/LocalScribe/{audio,transcripts,summaries}`.
 
+## Keeping and deleting
+
+Recordings are deleted after **30 days**. The transcripts and summaries made
+from them are kept — they are tiny, and they are the reason you recorded
+anything. Audio is what piles up (roughly 60 MB an hour) and what carries other
+people's voices, so it is the part on a timer.
+
+Old files are swept at the start of every `record` and `process`, so the policy
+runs without a cron job. You can also do it by hand:
+
+```bash
+localscribe prune --dry-run              # show what would go, delete nothing
+localscribe prune                        # delete it
+localscribe prune --all --days 90        # expire the notes too, after 90 days
+```
+
+Change the defaults in `.env`:
+
+```bash
+LOCALSCRIBE_RETENTION_DAYS=7             # audio; 0 keeps it forever
+LOCALSCRIBE_RETENTION_TRANSCRIPTS=90     # 0 by default, meaning keep
+LOCALSCRIBE_RETENTION_SUMMARIES=0
+```
+
+Deletion is permanent — there is no trash and no undo. It is deliberately narrow
+about what it will touch: only inside LocalScribe's own directories, only the
+file types it writes, and never through a symlink, so a stray file you put there
+is safe.
+
 ## Who said what
 
 The two audio sources are kept on separate channels — your mic on the left, the
