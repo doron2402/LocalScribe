@@ -9,8 +9,8 @@ le texte non plus.
 ```
 mic ─────────┐
              ├─► 16 kHz stereo WAV ─► Whisper ─► transcript ─► local LLM ─► summary.md
-loopback ────┘   (ch0 = you,          (offline)               (Ollama)
-                  ch1 = them)
+system ──────┘   (ch0 = you,          (offline)               (Ollama)
+  audio tap       ch1 = them)
 ```
 
 ## Démarrage rapide
@@ -39,9 +39,9 @@ secondes. Vous obtenez trois fichiers :
 Trois choses à savoir avant votre première vraie réunion :
 
 - **Lancez `localscribe doctor`.** Il vous dit ce qui manque et comment y remédier.
-- **Installez BlackHole**, sinon vous n'enregistrez que votre propre voix, pas
-  celle des autres participants. `setup.sh` s'en charge, mais il faut votre mot
-  de passe et un redémarrage. Voir [Audio système](#audio-système-important).
+- **Les deux côtés de l'appel sont captés automatiquement.** Sur macOS 14.4 ou
+  plus récent, cela ne demande aucun pilote, aucun mot de passe et aucun
+  redémarrage — voir [Audio système](#audio-système-important).
 - **Le premier lancement télécharge un modèle vocal d'environ 1,6 Go.**
   `setup.sh` le récupère à l'avance pour que cela n'arrive pas en pleine réunion.
 
@@ -58,18 +58,20 @@ pas de réseau.
 | Reconnaissance vocale | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) + CTranslate2 | MIT |
 | Reconnaissance vocale (GPU) | [mlx-whisper](https://github.com/ml-explore/mlx-examples/tree/main/whisper) | MIT |
 | Résumé | [Ollama](https://github.com/ollama/ollama) + Llama 3.1 | MIT / licence Llama |
-| Boucle audio système | [BlackHole](https://github.com/ExistentialAudio/BlackHole) | GPL-3.0 |
+| Audio système | Core Audio process taps via [pyobjc](https://github.com/ronaldoussoren/pyobjc) | MIT |
+| Audio système (macOS ≤ 13) | [BlackHole](https://github.com/ExistentialAudio/BlackHole) | GPL-3.0 |
 
 ## Ce que fait `setup.sh`
 
-Il crée l'environnement virtuel, installe BlackHole, télécharge le modèle
-Whisper, installe Ollama et récupère le modèle de résumé, ajoute une commande
-`localscribe` à votre PATH, puis lance les tests et `doctor`. On peut le relancer
-sans risque : chaque étape vérifie d'abord l'état existant.
+Il crée l'environnement virtuel, vérifie comment ce Mac peut capter l'audio
+système (n'installant BlackHole que si la machine est trop ancienne pour les
+taps), télécharge le modèle Whisper, installe Ollama et récupère le modèle de
+résumé, ajoute une commande `localscribe` à votre PATH, puis lance les tests et
+`doctor`. On peut le relancer sans risque : chaque étape vérifie d'abord.
 
 ```bash
 ./scripts/setup.sh --no-llm                    # sauter Ollama
-./scripts/setup.sh --no-audio                  # sauter BlackHole (sudo + redémarrage)
+./scripts/setup.sh --no-audio                  # sauter la vérification audio système
 ./scripts/setup.sh --whisper small.en          # un modèle vocal plus petit et plus rapide
 ```
 
@@ -79,19 +81,35 @@ passe par Rosetta et la transcription prend environ trois fois plus de temps.
 ### Audio système (important)
 <a id="audio-système-important"></a>
 
-macOS ne sait pas nativement enregistrer ce qui sort des haut-parleurs. Sans
-pilote de boucle, vous ne captez donc que votre micro, c'est-à-dire votre moitié
-de l'appel. Une fois que `setup.sh` a installé BlackHole et que vous avez
-redémarré :
+Pour enregistrer les personnes à qui vous parlez, LocalScribe doit capter ce qui
+*sort* de vos haut-parleurs, pas seulement ce qui entre dans votre micro.
+
+Sur **macOS 14.4 et plus récent**, il le fait avec un *process tap* Core Audio :
+l'enregistreur se branche directement sur la sortie du système et l'enveloppe
+dans un périphérique d'entrée temporaire qui n'existe que pendant
+l'enregistrement. Aucun pilote, aucun mot de passe administrateur, aucun
+redémarrage, et rien qui subsiste ensuite. `localscribe doctor` vous le confirme.
+
+Au premier enregistrement, macOS peut demander l'autorisation dans
+**Confidentialité et sécurité → Enregistrement de l'écran et de l'audio
+système**. Accordez-la une fois.
+
+Sur **macOS 13 ou antérieur**, les taps n'existent pas et il faut un pilote de
+boucle. `setup.sh` installe [BlackHole](https://existential.audio/blackhole/)
+(mot de passe et redémarrage requis), puis :
 
 1. Ouvrez **Audio MIDI Setup** (dans `/Applications/Utilities`).
 2. `+` → **Create Multi-Output Device**, cochez votre casque ou vos enceintes
    **et** BlackHole 2ch.
 3. Définissez ce Multi-Output Device comme sortie audio du Mac.
 
-Vous entendez toujours l'appel normalement, et BlackHole en transporte une copie
-que LocalScribe peut lire. `localscribe doctor` vous indique s'il a trouvé le
-périphérique.
+Dans les deux cas, vous entendez toujours l'appel normalement.
+
+```bash
+localscribe record --system-audio tap      # imposer le tap Core Audio
+localscribe record --system-audio device   # imposer BlackHole ou équivalent
+localscribe record --system-audio off      # micro seulement
+```
 
 ## Faut-il un serveur ?
 
@@ -134,12 +152,23 @@ Les fichiers sont écrits dans `~/LocalScribe/{audio,transcripts,summaries}`.
 ## Qui a dit quoi
 
 Les deux sources audio sont conservées sur des canaux distincts — votre micro à
-gauche, la boucle système à droite — si bien que LocalScribe identifie les
-locuteurs en comparant l'énergie des canaux mot par mot, au lieu d'exécuter un
+gauche, l'audio système à droite — si bien que LocalScribe identifie les
+locuteurs en comparant l'énergie des canaux, mot par mot, au lieu d'exécuter un
 modèle de diarisation. Vous obtenez **You** et **Them**, pas de vrais noms, mais
-c'est exact, gratuit et sans modèle Hugging Face à accès restreint. Un `?` final
-(`Them?`) signale un mot où les deux canaux étaient actifs et où la décision
-était serrée.
+c'est gratuit et sans modèle Hugging Face à accès restreint. Un `?` final
+(`Them?`) signale un mot où les deux côtés parlaient en même temps.
+
+L'astuce tient à une asymétrie : le canal système ne peut contenir que le
+correspondant, jamais vous. Un audio système fort signifie donc que c'est *lui*
+qui parle, et la seule question restante est de savoir si vous parlez aussi — ce
+à quoi répond le fait que votre micro porte ou non plus de signal que la fuite
+des haut-parleurs ne peut l'expliquer.
+
+Votre micro entend toujours un peu vos haut-parleurs, et lui soustraire le canal
+système n'y change rien : le temps que le son traverse la pièce, il a été étalé
+par l'écho, si bien qu'une copie retardée n'annule presque rien (mesuré sur un
+enregistrement réel : 0,1 dB). LocalScribe compare plutôt des enveloppes
+d'énergie lissées à un taux de fuite mesuré, ce qui résiste à la réverbération.
 
 Pour de vrais noms, passez la transcription au résumeur : un modèle de langue les
 déduit généralement de la façon dont les gens s'adressent les uns aux autres.

@@ -8,8 +8,8 @@
 ```
 mic ─────────┐
              ├─► 16 kHz stereo WAV ─► Whisper ─► transcript ─► local LLM ─► summary.md
-loopback ────┘   (ch0 = you,          (offline)               (Ollama)
-                  ch1 = them)
+system ──────┘   (ch0 = you,          (offline)               (Ollama)
+  audio tap       ch1 = them)
 ```
 
 ## 快速开始
@@ -37,9 +37,8 @@ localscribe record --label "Standup"
 第一次开真正的会议之前，有三件事值得知道：
 
 - **先运行 `localscribe doctor`。** 它会告诉你缺什么以及怎么解决。
-- **安装 BlackHole**，否则你只会录到自己的声音，而不是其他与会者的。
-  `setup.sh` 会安装它，但需要你的密码并重启。参见
-  [系统音频](#系统音频重要)。
+- **通话双方会被自动录下。** 在 macOS 14.4 或更高版本上，这不需要驱动、
+  不需要密码、也不需要重启——参见 [系统音频](#系统音频重要)。
 - **首次运行会下载约 1.6 GB 的语音模型。** `setup.sh` 会提前下载好，
   以免在会议中途才开始下载。
 
@@ -55,17 +54,19 @@ localscribe record --label "Standup"
 | 语音识别 | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) + CTranslate2 | MIT |
 | 语音识别（GPU） | [mlx-whisper](https://github.com/ml-explore/mlx-examples/tree/main/whisper) | MIT |
 | 摘要生成 | [Ollama](https://github.com/ollama/ollama) + Llama 3.1 | MIT / Llama 许可证 |
-| 系统音频回环 | [BlackHole](https://github.com/ExistentialAudio/BlackHole) | GPL-3.0 |
+| 系统音频 | 通过 [pyobjc](https://github.com/ronaldoussoren/pyobjc) 使用 Core Audio process taps | MIT |
+| 系统音频（macOS ≤ 13） | [BlackHole](https://github.com/ExistentialAudio/BlackHole) | GPL-3.0 |
 
 ## `setup.sh` 做了什么
 
-它创建虚拟环境、安装 BlackHole、下载 Whisper 模型、安装 Ollama 并拉取摘要模型、
+它创建虚拟环境、检查这台 Mac 能以何种方式采集系统音频（只有在机器太旧、不支持
+audio tap 时才安装 BlackHole）、下载 Whisper 模型、安装 Ollama 并拉取摘要模型、
 把 `localscribe` 命令链接到你的 PATH，然后运行测试和 `doctor`。可以放心重复运行，
 每一步都会先检查当前状态。
 
 ```bash
 ./scripts/setup.sh --no-llm                    # 跳过 Ollama
-./scripts/setup.sh --no-audio                  # 跳过 BlackHole（需要 sudo 并重启）
+./scripts/setup.sh --no-audio                  # 完全跳过系统音频检查
 ./scripts/setup.sh --whisper small.en          # 更小更快的语音模型
 ```
 
@@ -75,16 +76,32 @@ CTranslate2 跑在 Rosetta 下，转写耗时大约会变成三倍。
 ### 系统音频（重要）
 <a id="系统音频重要"></a>
 
-macOS 没有内置方式录制扬声器输出的声音，因此如果没有回环驱动，你只能采集到自己的
-麦克风，也就是通话中你这一半。等 `setup.sh` 安装好 BlackHole 并重启之后：
+要录下与你通话的人，LocalScribe 必须采集从扬声器**输出**的声音，而不只是麦克风
+输入的声音。
+
+在 **macOS 14.4 及更高版本**上，它使用 Core Audio 进程捕获（process tap）：录音
+程序直接接入系统输出，并把它包装成一个仅在录制期间存在的临时输入设备。不需要
+驱动、不需要管理员密码、不需要重启，结束后也不留下任何东西。运行
+`localscribe doctor` 会确认这一点。
+
+第一次录制时，macOS 可能会在**隐私与安全性 → 屏幕与系统音频录制**中请求授权。
+授权一次即可。
+
+在 **macOS 13 或更早版本**上没有 tap，需要改用回环驱动。`setup.sh` 会安装
+[BlackHole](https://existential.audio/blackhole/)（需要密码并重启），然后：
 
 1. 打开 **Audio MIDI Setup**（位于 `/Applications/Utilities`）。
 2. `+` → **Create Multi-Output Device**，同时勾选你的耳机／扬声器**和**
    BlackHole 2ch。
 3. 把这个 Multi-Output Device 设为 Mac 的声音输出。
 
-你依然能正常听到通话，同时 BlackHole 会传送一份副本供 LocalScribe 读取。
-运行 `localscribe doctor` 可以确认它是否找到了该设备。
+两种方式下你都能照常听到通话。
+
+```bash
+localscribe record --system-audio tap      # 强制使用 Core Audio tap
+localscribe record --system-audio device   # 强制使用 BlackHole 等设备
+localscribe record --system-audio off      # 仅麦克风
+```
 
 ## 需要服务器吗？
 
@@ -124,11 +141,19 @@ localscribe list                         # 目前录制过的内容
 
 ## 谁说了哪句话
 
-两路音频分别保存在不同声道——你的麦克风在左声道，系统回环在右声道——因此
+两路音频分别保存在不同声道——你的麦克风在左声道，系统音频在右声道——因此
 LocalScribe 通过逐词比较两个声道的能量来标注说话人，而不是运行声纹分离模型。
-这样得到的是 **You** 和 **Them**，而不是真实姓名，但它精确、免费，也不需要任何
-需要申请权限的 Hugging Face 模型。词尾的 `?`（如 `Them?`）表示该词处两个声道都
-有声音，判断结果比较接近。
+这样得到的是 **You** 和 **Them**，而不是真实姓名，但它免费，也不需要任何需要
+申请权限的 Hugging Face 模型。词尾的 `?`（如 `Them?`）表示该词处双方同时在说话。
+
+其中的关键是一种不对称性：系统声道只可能包含对方，永远不会包含你。所以系统音频
+很响就意味着**对方**在说话，剩下的唯一问题是你是否也在说——这由你的麦克风是否
+录到了超出扬声器串音所能解释的能量来回答。
+
+你的麦克风总会听到一点自己的扬声器，而从中减去系统声道并不能消除它：声音穿过
+房间之后已经被回声抹开，因此减去一个延迟副本几乎什么都抵消不掉（在真实录音上
+实测：0.1 dB）。LocalScribe 改为将平滑后的能量包络与实测的串音比例进行比较，
+这种做法能经受住混响。
 
 想要真实姓名的话，把转写文本交给摘要引擎——语言模型通常能从人们互相称呼的方式中
 推断出来。

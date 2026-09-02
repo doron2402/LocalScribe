@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 import numpy as np
@@ -77,49 +77,128 @@ def _speaker_labels(roles: list[str]) -> dict[str, str]:
     return {"me": "You", "them": "Them"}
 
 
-def _cancel_leak(audio: np.ndarray, roles: list[str]) -> np.ndarray:
-    """Subtract the speaker bleed that the microphone picks up.
+_FRAME = 0.02     # seconds per analysis frame
+_SMOOTH = 0.20    # seconds of smoothing; must exceed the room's reverb tail
 
-    Channel 0 always carries a quiet copy of whatever the speakers played, so on
-    a call where you mostly listen, that bleed is the loudest thing your mic
-    ever recorded — and per-channel normalization would then scale it up to
-    parity and credit every word to you. Estimating the leak with least squares
-    and removing it keeps the comparison honest.
+
+@dataclass
+class Bleed:
+    """What the microphone picks up from the speakers, as an energy ratio.
+
+    Subtracting the loopback waveform from the mic barely helps: by the time
+    sound has crossed the room it has been convolved with the room, so a delayed
+    copy cancels almost nothing (measured: 0.1 dB). Energy ratios survive that.
+
+    The asymmetry that makes this work is physical — the loopback channel can
+    only ever contain the far end, never you. So loud loopback means they are
+    talking, and the only question left is whether *you* are talking too, which
+    is answered by whether your mic carries more than the bleed can explain.
     """
+
+    gain: float        # mic energy per unit of loopback energy, when only they talk
+    mic_floor: float   # background level of each channel
+    them_floor: float
+    mic_env: np.ndarray = field(default_factory=lambda: np.zeros(0))
+    them_env: np.ndarray = field(default_factory=lambda: np.zeros(0))
+    single: bool = False   # mic-only recording: everything is you
+
+
+def _frame_rms(channel: np.ndarray) -> np.ndarray:
+    size = max(int(_FRAME * config.SAMPLE_RATE), 1)
+    usable = (len(channel) // size) * size
+    if usable == 0:
+        return np.zeros(1)
+    return np.sqrt(np.mean(channel[:usable].reshape(-1, size) ** 2, axis=1))
+
+
+def _envelope(channel: np.ndarray) -> np.ndarray:
+    """Frame energy smoothed over ~200 ms.
+
+    Instantaneous frames are useless for comparing the two channels: the mic
+    copy of the speakers arrives a few milliseconds late and then rings on
+    through the room's reverb, so a frame where the loopback has already gone
+    quiet still has energy in the mic. Measured on a real recording, the
+    per-frame ratio between the channels spans a factor of thirty. Smoothing
+    past the reverb tail collapses that spread.
+    """
+    frames = _frame_rms(channel)
+    width = max(int(_SMOOTH / _FRAME), 1)
+    if frames.size < width:
+        return frames
+    kernel = np.ones(width) / width
+    return np.convolve(frames, kernel, mode="same")
+
+
+def measure_bleed(audio: np.ndarray, roles: list[str]) -> Bleed:
     if audio.shape[1] < 2 or "me" not in roles or "them" not in roles:
-        return audio
+        return Bleed(0.0, 0.0, 0.0, single=True)
+
     i_me, i_them = roles.index("me"), roles.index("them")
-    them = audio[:, i_them]
-    denom = float(them @ them)
-    if denom <= 0:
-        return audio
-    alpha = float(np.clip((them @ audio[:, i_me]) / denom, 0.0, 0.9))
-    if alpha < 1e-3:
-        return audio
-    cleaned = audio.copy()
-    cleaned[:, i_me] = audio[:, i_me] - alpha * them
-    return cleaned
+    mic, them = _envelope(audio[:, i_me]), _envelope(audio[:, i_them])
+    n = min(len(mic), len(them))
+    mic, them = mic[:n], them[:n]
+
+    # A digital loopback is exactly silent between sounds, so a purely relative
+    # floor would treat any nonzero sample as speech.
+    mic_floor = max(float(np.percentile(mic, 10)), 1e-4)
+    them_floor = max(float(np.percentile(them, 10)), 1e-4)
+
+    # Frames where the far end is clearly talking. Among those, the quietest
+    # mic-to-loopback ratios are the ones where *only* they were talking, which
+    # is exactly the bleed. A high percentile would be contaminated by the
+    # moments you spoke over them.
+    active = them > max(them_floor * 4, float(np.percentile(them, 60)))
+    if active.sum() < 5:
+        return Bleed(0.0, mic_floor, them_floor)
+    ratios = mic[active] / (them[active] + _EPS)
+    # Frames where you also spoke sit above the bleed, never below, so the bulk
+    # of the distribution is bleed and its upper tail is you.
+    return Bleed(float(np.percentile(ratios, 40)), mic_floor, them_floor, mic, them)
 
 
-def _norms(audio: np.ndarray) -> np.ndarray:
-    """Per-channel loudness reference, floored so a near-silent channel cannot
-    be normalized up into a contender."""
-    norms = np.percentile(np.abs(audio), 95, axis=0)
-    return np.maximum(norms, 0.15 * norms.max()) + _EPS
-
-
-def _channel_scores(
-    audio: np.ndarray, start: float, end: float, norms: np.ndarray
-) -> np.ndarray:
-    """Per-channel loudness over [start, end), normalized for device gain."""
-    center = (start + end) / 2
-    half = max((end - start) / 2, 0.125)   # never judge on less than 250 ms
-    a = max(int((center - half) * config.SAMPLE_RATE), 0)
-    b = min(int((center + half) * config.SAMPLE_RATE), audio.shape[0])
+def _window_rms(audio: np.ndarray, start: float, end: float) -> np.ndarray:
+    centre, half = (start + end) / 2, max((end - start) / 2, 0.06)
+    a = max(int((centre - half) * config.SAMPLE_RATE), 0)
+    b = min(int((centre + half) * config.SAMPLE_RATE), audio.shape[0])
     if b <= a:
         return np.zeros(audio.shape[1])
-    rms = np.sqrt(np.mean(np.square(audio[a:b, :]), axis=0))
-    return rms / norms
+    return np.sqrt(np.mean(np.square(audio[a:b, :]), axis=0))
+
+
+def _env_level(env: np.ndarray, start: float, end: float) -> float:
+    if env.size == 0:
+        return 0.0
+    a = max(int(start / _FRAME), 0)
+    b = min(max(int(end / _FRAME) + 1, a + 1), env.size)
+    return float(np.mean(env[a:b]))
+
+
+def _who(audio: np.ndarray, roles: list[str], bleed: Bleed,
+         start: float, end: float) -> tuple[int | None, bool]:
+    """-> (channel index, confident). None means nobody identifiable."""
+    if bleed.single:
+        return (0, True) if _window_rms(audio, start, end)[0] > bleed.mic_floor else (None, False)
+
+    i_me, i_them = roles.index("me"), roles.index("them")
+    if bleed.mic_env.size:
+        mic = _env_level(bleed.mic_env, start, end)
+        them = _env_level(bleed.them_env, start, end)
+    else:
+        rms = _window_rms(audio, start, end)
+        mic, them = float(rms[i_me]), float(rms[i_them])
+
+    they_speak = them > bleed.them_floor * 3
+    explained = bleed.gain * them          # what bleed alone would put in the mic
+    excess = mic - explained
+    you_speak = excess > max(bleed.mic_floor * 3, 0.6 * explained)
+
+    if they_speak and you_speak:
+        return (i_me if excess > explained else i_them), False   # talking over each other
+    if they_speak:
+        return i_them, True
+    if you_speak or mic > bleed.mic_floor * 3:
+        return i_me, True
+    return None, False
 
 
 def _label(roles: list[str], idx: int, confident: bool) -> str:
@@ -129,7 +208,7 @@ def _label(roles: list[str], idx: int, confident: bool) -> str:
 
 
 def _split_by_speaker(
-    words, audio: np.ndarray, roles: list[str], norms: np.ndarray
+    words, audio: np.ndarray, roles: list[str], bleed: Bleed
 ) -> list[tuple[str, float, float, list[str]]]:
     """Group consecutive words into runs by whichever channel was loudest.
 
@@ -139,10 +218,13 @@ def _split_by_speaker(
     """
     runs: list[list] = []
     for w in words:
-        scores = _channel_scores(audio, w.start, w.end, norms)
-        order = np.argsort(scores)[::-1]
-        top = int(order[0])
-        confident = scores[top] > 1e-3 and scores[order[1]] < 0.6 * scores[top]
+        top, confident = _who(audio, roles, bleed, w.start, w.end)
+        if top is None:
+            if runs:   # a gap inside someone's turn is still their turn
+                runs[-1][2] = w.end
+                runs[-1][3].append(w.word)
+                runs[-1][4].append(False)
+            continue
         if runs and runs[-1][0] == top:
             # Stay with the current speaker unless the switch is convincing;
             # single-word flips are usually crosstalk, not a real turn.
@@ -167,17 +249,13 @@ def _split_by_speaker(
 
 
 def _attribute(
-    audio: np.ndarray, roles: list[str], start: float, end: float, norms: np.ndarray
+    audio: np.ndarray, roles: list[str], bleed: Bleed, start: float, end: float
 ) -> str:
     """Segment-level fallback for when word timestamps are unavailable."""
-    if audio.ndim == 1 or len(roles) < 2:
-        return {"me": "You", "them": "Them"}.get(roles[0] if roles else "me", "Speaker")
-    scores = _channel_scores(audio, start, end, norms)
-    order = np.argsort(scores)[::-1]
-    top = int(order[0])
-    if scores[top] < 1e-3:
+    top, confident = _who(audio, roles, bleed, start, end)
+    if top is None:
         return "Speaker"
-    return _label(roles, top, scores[order[1]] < 0.75 * scores[top])
+    return _label(roles, top, confident)
 
 
 def transcribe(
@@ -202,8 +280,7 @@ def transcribe(
 
     # Speaker attribution reads a leak-cancelled copy instead, normalized per
     # channel so device gain doesn't decide who was talking.
-    scored = _cancel_leak(data, roles)
-    norms = _norms(scored)
+    bleed = measure_bleed(data, roles)
 
     model_name = model_name or config.WHISPER_MODEL
     lang = language if language is not None else config.WHISPER_LANG
@@ -235,9 +312,9 @@ def transcribe(
 
     for s in raw_segments:
         if multichannel and s.words:
-            runs = _split_by_speaker(s.words, scored, roles, norms)
+            runs = _split_by_speaker(s.words, data, roles, bleed)
         elif s.text:
-            runs = [(_attribute(scored, roles, s.start, s.end, norms), s.start, s.end, s.text)]
+            runs = [(_attribute(data, roles, bleed, s.start, s.end), s.start, s.end, s.text)]
         else:
             runs = []
         for speaker, start, end, text in runs:

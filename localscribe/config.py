@@ -35,6 +35,12 @@ SUMMARY_DIR = DATA_DIR / "summaries"
 # Audio device names. Substring match, case-insensitive.
 MIC_DEVICE = _env("LOCALSCRIBE_MIC_DEVICE", "")            # "" -> system default input
 LOOPBACK_DEVICE = _env("LOCALSCRIBE_LOOPBACK_DEVICE", "BlackHole")
+# How to capture the other side of the call:
+#   auto   Core Audio tap if this macOS has it, else LOOPBACK_DEVICE
+#   tap    insist on the Core Audio tap
+#   device insist on LOOPBACK_DEVICE (BlackHole and friends)
+#   off    microphone only
+SYSTEM_AUDIO = _env("LOCALSCRIBE_SYSTEM_AUDIO", "auto")
 
 SAMPLE_RATE = 16_000  # what Whisper wants; no resample step later
 

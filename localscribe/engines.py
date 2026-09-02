@@ -135,8 +135,36 @@ def _run_faster_whisper(audio, model_name, language, want_words, compute_type):
     return stream(), info.language
 
 
+def _speech_regions(audio) -> list[tuple[float, float]]:
+    """Speech spans in seconds, via faster-whisper's bundled Silero VAD."""
+    from faster_whisper.vad import VadOptions, get_speech_timestamps
+
+    from . import config
+
+    samples = get_speech_timestamps(
+        np.asarray(audio, dtype=np.float32),
+        VadOptions(min_silence_duration_ms=500),
+    )
+    return [
+        (s["start"] / config.SAMPLE_RATE, s["end"] / config.SAMPLE_RATE)
+        for s in samples
+    ]
+
+
+def _overlaps(start: float, end: float, regions: list[tuple[float, float]]) -> bool:
+    return any(start < r_end and end > r_start for r_start, r_end in regions)
+
+
 def _run_mlx(audio, model_name, language, want_words, _compute_type):
     from mlx_whisper.transcribe import transcribe as mlx_transcribe
+
+    # mlx-whisper has no VAD of its own, and Whisper invents text over silence —
+    # a recording that ends in a quiet minute comes back with a tail of "the.
+    # the. the". Keep only what the voice detector agrees is speech.
+    try:
+        regions = _speech_regions(audio)
+    except Exception:
+        regions = []
 
     result = mlx_transcribe(
         np.asarray(audio, dtype=np.float32),
@@ -149,15 +177,17 @@ def _run_mlx(audio, model_name, language, want_words, _compute_type):
 
     def stream():
         for s in result.get("segments", []):
-            yield RawSegment(
-                start=float(s["start"]),
-                end=float(s["end"]),
-                text=s["text"].strip(),
-                words=[
-                    Word(float(w["start"]), float(w["end"]), w["word"])
-                    for w in s.get("words", [])
-                ],
-            )
+            start, end = float(s["start"]), float(s["end"])
+            if regions and not _overlaps(start, end, regions):
+                continue
+            words = [
+                Word(float(w["start"]), float(w["end"]), w["word"])
+                for w in s.get("words", [])
+                if not regions or _overlaps(float(w["start"]), float(w["end"]), regions)
+            ]
+            if s.get("words") and not words:
+                continue
+            yield RawSegment(start=start, end=end, text=s["text"].strip(), words=words)
 
     return stream(), result.get("language") or language
 

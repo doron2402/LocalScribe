@@ -9,8 +9,8 @@ el texto tampoco.
 ```
 mic ─────────┐
              ├─► 16 kHz stereo WAV ─► Whisper ─► transcript ─► local LLM ─► summary.md
-loopback ────┘   (ch0 = you,          (offline)               (Ollama)
-                  ch1 = them)
+system ──────┘   (ch0 = you,          (offline)               (Ollama)
+  audio tap       ch1 = them)
 ```
 
 ## Inicio rápido
@@ -39,9 +39,9 @@ Obtienes tres archivos:
 Tres cosas que conviene saber antes de tu primera reunión de verdad:
 
 - **Ejecuta `localscribe doctor`.** Te dice qué falta y cómo arreglarlo.
-- **Instala BlackHole**, o solo grabarás tu propia voz, no la de los demás
-  participantes. `setup.sh` lo instala, pero necesita tu contraseña y reiniciar.
-  Consulta [Audio del sistema](#audio-del-sistema-importante).
+- **Ambos lados de la llamada se capturan automáticamente.** En macOS 14.4 o
+  posterior no hace falta ningún controlador, ni contraseña, ni reiniciar —
+  consulta [Audio del sistema](#audio-del-sistema-importante).
 - **La primera ejecución descarga un modelo de voz de ~1,6 GB.** `setup.sh` lo
   baja de antemano para que no ocurra en mitad de una reunión.
 
@@ -58,18 +58,20 @@ ni red.
 | Voz a texto | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) + CTranslate2 | MIT |
 | Voz a texto (GPU) | [mlx-whisper](https://github.com/ml-explore/mlx-examples/tree/main/whisper) | MIT |
 | Resumen | [Ollama](https://github.com/ollama/ollama) + Llama 3.1 | MIT / licencia Llama |
-| Bucle de audio del sistema | [BlackHole](https://github.com/ExistentialAudio/BlackHole) | GPL-3.0 |
+| Audio del sistema | Core Audio process taps vía [pyobjc](https://github.com/ronaldoussoren/pyobjc) | MIT |
+| Audio del sistema (macOS ≤ 13) | [BlackHole](https://github.com/ExistentialAudio/BlackHole) | GPL-3.0 |
 
 ## Qué hace `setup.sh`
 
-Crea el entorno virtual, instala BlackHole, descarga el modelo de Whisper,
-instala Ollama y descarga el modelo de resumen, enlaza el comando `localscribe`
-en tu PATH y luego ejecuta las pruebas y `doctor`. Se puede volver a ejecutar
-sin riesgo: cada paso comprueba antes de actuar.
+Crea el entorno virtual, comprueba cómo puede capturar audio del sistema este
+Mac (instalando BlackHole solo si la máquina es demasiado antigua para los
+taps), descarga el modelo de Whisper, instala Ollama y descarga el modelo de
+resumen, enlaza el comando `localscribe` en tu PATH y luego ejecuta las pruebas
+y `doctor`. Se puede volver a ejecutar sin riesgo: cada paso comprueba antes.
 
 ```bash
 ./scripts/setup.sh --no-llm                    # omitir Ollama por completo
-./scripts/setup.sh --no-audio                  # omitir BlackHole (pide sudo y reinicio)
+./scripts/setup.sh --no-audio                  # omitir la comprobación de audio del sistema
 ./scripts/setup.sh --whisper small.en          # un modelo de voz más pequeño y rápido
 ```
 
@@ -79,17 +81,34 @@ CTranslate2 bajo Rosetta y la transcripción tarda unas tres veces más.
 ### Audio del sistema (importante)
 <a id="audio-del-sistema-importante"></a>
 
-macOS no tiene forma nativa de grabar lo que sale por los altavoces, así que sin
-un controlador de bucle solo capturas tu micrófono, es decir, tu mitad de la
-llamada. Después de que `setup.sh` instale BlackHole y reinicies:
+Para grabar a las personas con las que hablas, LocalScribe tiene que capturar lo
+que sale por tus altavoces, no solo lo que entra por el micrófono.
+
+En **macOS 14.4 y posterior** lo hace con un *process tap* de Core Audio: la
+grabación se engancha directamente a la salida del sistema y la envuelve en un
+dispositivo de entrada temporal que solo existe mientras grabas. Sin controlador,
+sin contraseña de administrador, sin reiniciar y sin dejar nada detrás.
+`localscribe doctor` te lo confirma.
+
+La primera vez que grabes, macOS puede pedir permiso en **Privacidad y seguridad
+→ Grabación de pantalla y audio del sistema**. Concédelo una vez.
+
+En **macOS 13 o anterior** no existen los taps y hace falta un controlador de
+bucle. `setup.sh` instala [BlackHole](https://existential.audio/blackhole/)
+(pide tu contraseña y un reinicio), y después:
 
 1. Abre **Audio MIDI Setup** (en `/Applications/Utilities`).
 2. `+` → **Create Multi-Output Device**, y marca tus auriculares o altavoces
    **y** BlackHole 2ch.
 3. Selecciona ese Multi-Output Device como salida de sonido del Mac.
 
-Sigues oyendo la llamada con normalidad, y BlackHole transporta una copia que
-LocalScribe puede leer. `localscribe doctor` te dice si encontró el dispositivo.
+En ambos casos sigues oyendo la llamada con normalidad.
+
+```bash
+localscribe record --system-audio tap      # exigir el tap de Core Audio
+localscribe record --system-audio device   # exigir BlackHole o similar
+localscribe record --system-audio off      # solo micrófono
+```
 
 ## ¿Necesita un servidor?
 
@@ -132,12 +151,24 @@ La salida se escribe en `~/LocalScribe/{audio,transcripts,summaries}`.
 ## Quién dijo qué
 
 Las dos fuentes de audio se guardan en canales separados — tu micrófono en el
-izquierdo y el bucle del sistema en el derecho — así que LocalScribe etiqueta a
-los hablantes comparando la energía de cada canal palabra por palabra, en lugar
+izquierdo y el audio del sistema en el derecho — así que LocalScribe etiqueta a
+los hablantes comparando la energía de cada canal, palabra por palabra, en lugar
 de ejecutar un modelo de diarización. Eso te da **You** frente a **Them**, no
-nombres propios, pero es exacto, gratuito y no necesita ningún modelo restringido
-de Hugging Face. Una `?` final (`Them?`) marca una palabra en la que ambos
-canales estaban activos y la decisión fue ajustada.
+nombres propios, pero es gratuito y no necesita ningún modelo restringido de
+Hugging Face. Una `?` final (`Them?`) marca una palabra en la que ambos lados
+hablaban a la vez.
+
+La clave es una asimetría: el canal del sistema solo puede contener al otro
+extremo, nunca a ti. Así que un audio del sistema fuerte significa que hablan
+*ellos*, y la única pregunta que queda es si tú hablas también — algo que
+responde si tu micrófono lleva más señal de la que la filtración de los
+altavoces puede explicar.
+
+Tu micrófono siempre oye un poco tus altavoces, y restarle el canal del sistema
+no lo elimina: cuando el sonido ha cruzado la sala ya viene emborronado por el
+eco, así que una copia retrasada no cancela casi nada (medido en una grabación
+real: 0,1 dB). LocalScribe compara envolventes de energía suavizadas contra una
+proporción de filtración medida, que sí sobrevive a la reverberación.
 
 Para obtener nombres reales, pasa la transcripción por el resumidor: un modelo de
 lenguaje suele deducirlos por cómo se dirigen las personas entre sí.

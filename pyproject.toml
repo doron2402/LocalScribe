@@ -24,6 +24,9 @@ dependencies = [
     "soxr>=0.5",            # high-quality resampling (LGPL)
     "faster-whisper>=1.1",  # CTranslate2 Whisper (MIT)
     "rich>=13.7",           # terminal UI (MIT)
+    # Core Audio process taps: system audio with no driver and no admin password.
+    "pyobjc-core>=10.3; sys_platform == 'darwin'",
+    "pyobjc-framework-CoreAudio>=10.3; sys_platform == 'darwin'",
 ]
 
 [project.optional-dependencies]

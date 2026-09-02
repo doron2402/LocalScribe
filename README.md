@@ -13,8 +13,8 @@ does either.
 ```
 mic ─────────┐
              ├─► 16 kHz stereo WAV ─► Whisper ─► transcript ─► local LLM ─► summary.md
-loopback ────┘   (ch0 = you,          (offline)               (Ollama)
-                  ch1 = them)
+system ──────┘   (ch0 = you,          (offline)               (Ollama)
+  audio tap       ch1 = them)
 ```
 
 ## Quick start
@@ -42,9 +42,9 @@ Talk, press `Ctrl-C` when the meeting ends, and wait a few seconds. You get:
 Three things worth knowing before your first real meeting:
 
 - **Run `localscribe doctor`.** It tells you what is missing and how to fix it.
-- **Install BlackHole**, or you record only your own voice — not the other
-  participants. `setup.sh` does it, but it needs your password and a reboot.
-  See [System audio](#system-audio-important).
+- **Both sides of the call are captured automatically.** On macOS 14.4 or
+  newer that needs no driver, no password and no reboot — see
+  [System audio](#system-audio-important).
 - **The first run downloads a ~1.6 GB speech model.** `setup.sh` fetches it up
   front so it doesn't happen mid-meeting.
 
@@ -60,18 +60,20 @@ No server to start, nothing running in the background, no API key, no network.
 | Speech-to-text | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) + CTranslate2 | MIT |
 | Speech-to-text (GPU) | [mlx-whisper](https://github.com/ml-explore/mlx-examples/tree/main/whisper) | MIT |
 | Summarization | [Ollama](https://github.com/ollama/ollama) + Llama 3.1 | MIT / Llama license |
-| System-audio loopback | [BlackHole](https://github.com/ExistentialAudio/BlackHole) | GPL-3.0 |
+| System audio | Core Audio process taps via [pyobjc](https://github.com/ronaldoussoren/pyobjc) | MIT |
+| System audio (macOS ≤ 13) | [BlackHole](https://github.com/ExistentialAudio/BlackHole) | GPL-3.0 |
 
 ## What setup.sh does
 
-It sets up the virtualenv, installs BlackHole, downloads the
-Whisper model, installs Ollama and pulls the summarizer model, links a
+It sets up the virtualenv, checks how this Mac can capture system audio
+(installing BlackHole only if the machine is too old for audio taps), downloads
+the Whisper model, installs Ollama and pulls the summarizer model, links a
 `localscribe` command onto your PATH, then runs the tests and `doctor`. It is
 safe to re-run; every step checks first.
 
 ```bash
 ./scripts/setup.sh --no-llm                    # skip Ollama entirely
-./scripts/setup.sh --no-audio                  # skip BlackHole (needs sudo + reboot)
+./scripts/setup.sh --no-audio                  # skip the system-audio check entirely
 ./scripts/setup.sh --whisper small.en          # a smaller, faster speech model
 ```
 
@@ -81,17 +83,34 @@ CTranslate2 through Rosetta and transcription takes about 3x longer.
 ### System audio (important)
 <a id="system-audio-important"></a>
 
-macOS has no built-in way to record what's coming *out* of your speakers, so
-without a loopback driver you capture only your own microphone — your half of
-the call. After `setup.sh` installs BlackHole and you reboot:
+To record the people you are talking to, LocalScribe has to capture what comes
+*out* of your speakers, not just what goes into your microphone.
+
+On **macOS 14.4 and newer** it does that with a Core Audio process tap: the
+recorder taps the system's output directly and wraps it in a temporary input
+device that exists only while you are recording. No driver, no admin password,
+no reboot, and nothing left behind afterwards. It just works, and
+`localscribe doctor` will say so.
+
+The first time you record, macOS may ask for permission under **Privacy &
+Security → Screen & System Audio Recording**. Grant it once.
+
+On **macOS 13 or older**, taps don't exist and you need a loopback driver
+instead. `setup.sh` installs [BlackHole](https://existential.audio/blackhole/)
+(it needs your password and a reboot), and then:
 
 1. Open **Audio MIDI Setup** (`/Applications/Utilities`).
 2. `+` → **Create Multi-Output Device**, tick your speakers/headphones **and**
    BlackHole 2ch.
 3. Set that Multi-Output Device as the Mac's sound output.
 
-You still hear the call normally; BlackHole carries a copy that localscribe reads.
-`localscribe doctor` tells you whether it found the device.
+Either way you still hear the call normally.
+
+```bash
+localscribe record --system-audio tap      # insist on the Core Audio tap
+localscribe record --system-audio device   # insist on BlackHole or similar
+localscribe record --system-audio off      # microphone only
+```
 
 ## Does it need a server?
 

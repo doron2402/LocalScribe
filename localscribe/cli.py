@@ -6,6 +6,7 @@ import json
 import re
 import sys
 import threading
+from contextlib import ExitStack
 from datetime import datetime
 from pathlib import Path
 
@@ -15,7 +16,7 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
-from . import config, engines
+from . import config, engines, systemaudio
 from .audio import Recorder, default_input, find_device, list_input_devices
 
 console = Console()
@@ -60,12 +61,57 @@ def meter(level: float, width: int = 24) -> str:
     return f"[{color}]{'█' * filled}{'·' * (width - filled)}[/{color}]"
 
 
-def resolve_devices(mic_query: str | None, loopback_query: str | None):
+def resolve_mic(mic_query: str | None):
     mic_query = config.MIC_DEVICE if mic_query is None else mic_query
+    return find_device(mic_query) if mic_query else default_input()
+
+
+def open_system_audio(stack: ExitStack, mode: str, loopback_query: str | None):
+    """Get a device carrying the other side of the call.
+
+    Preference order is a Core Audio tap, which needs no driver and no admin
+    password, then a named loopback device like BlackHole for machines too old
+    for taps. Returns (device, how, note).
+    """
+    if mode == "off":
+        return None, "off", ""
+
+    explicit = loopback_query is not None
+    query = config.LOOPBACK_DEVICE if loopback_query is None else loopback_query
+
+    # An explicitly named device is an instruction, not a preference.
+    if explicit or mode == "device":
+        device = find_device(query) if query else None
+        if device:
+            return device, "device", ""
+        return None, "none", f"no input device matching '{query}'"
+
+    usable, why_not = systemaudio.available()
+    if usable:
+        try:
+            tap = stack.enter_context(systemaudio.SystemAudioTap())
+            device = find_device(tap.name)
+            if device:
+                return device, "tap", ""
+            return None, "none", "the system-audio device never appeared"
+        except systemaudio.SystemAudioError as e:
+            why_not = str(e)
+            if mode == "tap":
+                return None, "none", why_not
+
+    if mode == "tap":
+        return None, "none", why_not
+
+    device = find_device(query) if query else None
+    if device:
+        return device, "device", ""
+    return None, "none", why_not
+
+
+def resolve_devices(mic_query: str | None, loopback_query: str | None):
+    """Read-only view for doctor: never creates a tap."""
     loopback_query = config.LOOPBACK_DEVICE if loopback_query is None else loopback_query
-    mic = find_device(mic_query) if mic_query else default_input()
-    loopback = find_device(loopback_query) if loopback_query else None
-    return mic, loopback
+    return resolve_mic(mic_query), (find_device(loopback_query) if loopback_query else None)
 
 
 # ----------------------------------------------------------------- commands
@@ -99,14 +145,20 @@ def cmd_doctor(args) -> int:
         ok = False
         console.print("  [red]✗[/red] No microphone found. Grant mic access under "
                       "System Settings → Privacy & Security → Microphone.")
-    if loopback:
+    mode = getattr(args, "system_audio", None) or config.SYSTEM_AUDIO
+    usable, why_not = systemaudio.available()
+    if mode == "off":
+        console.print("  [yellow]![/yellow] System audio disabled — microphone only")
+    elif usable and mode in ("auto", "tap"):
+        console.print("  [green]✓[/green] System audio: Core Audio tap "
+                      "(no driver, no password, no reboot)")
+    elif loopback:
         console.print(f"  [green]✓[/green] System audio: {loopback.name}")
     else:
-        console.print(
-            f"  [yellow]![/yellow] No loopback device matching "
-            f"'{config.LOOPBACK_DEVICE}'. You will record [bold]only your own "
-            f"voice[/bold]. See README → System audio."
-        )
+        ok = False
+        console.print(f"  [red]✗[/red] No way to capture the other side of the call "
+                      f"({why_not}). Install BlackHole, or record your mic only "
+                      f"with --system-audio off.")
 
     try:
         engine = engines.resolve(args.engine)
@@ -165,20 +217,40 @@ def cmd_doctor(args) -> int:
     return 0 if ok else 1
 
 
-def _record(args) -> Path | None:
-    mic, loopback = resolve_devices(args.mic, args.loopback)
-    if not mic and not loopback:
-        console.print("[red]No usable input device.[/red] Run `localscribe devices`.")
-        return None
-    if not loopback:
-        console.print("[yellow]No system-audio loopback — recording your microphone "
-                      "only.[/yellow] Run `localscribe doctor` for setup.\n")
+def _source_label(loopback, how: str) -> str:
+    if loopback is None:
+        return "—"
+    if how == "tap":
+        return "system audio (Core Audio tap)"
+    return loopback.name
 
+
+def _record(args) -> Path | None:
+    stack = ExitStack()
+    with stack:
+        mic = resolve_mic(args.mic)
+        mode = getattr(args, "system_audio", None) or config.SYSTEM_AUDIO
+        loopback, how, note = open_system_audio(stack, mode, args.loopback)
+
+        if not mic and not loopback:
+            console.print("[red]No usable input device.[/red] Run `localscribe devices`.")
+            return None
+        if not loopback:
+            console.print(
+                f"[yellow]Recording your microphone only[/yellow] — the other side of "
+                f"the call will be missing.\n[dim]{note}. Run `localscribe doctor`.[/dim]\n"
+            )
+        elif how == "tap":
+            console.print("[dim]Capturing system audio directly — no driver needed.[/dim]")
+
+        return _run_recorder(args, mic, loopback, how)
+
+
+def _run_recorder(args, mic, loopback, how) -> Path | None:
     label = args.label or "meeting"
     started = datetime.now()
-    base = f"{slugify(label)}_{started:%Y-%m-%d_%H%M}"
     config.ensure_dirs()
-    audio_path = config.AUDIO_DIR / f"{base}.wav"
+    audio_path = config.AUDIO_DIR / f"{slugify(label)}_{started:%Y-%m-%d_%H%M}.wav"
 
     rec = Recorder(audio_path, mic, loopback)
     limit = parse_duration(args.duration)
@@ -186,7 +258,7 @@ def _record(args) -> Path | None:
     console.print(Panel.fit(
         f"[bold]{label}[/bold]\n"
         f"mic: {mic.name if mic else '—'}\n"
-        f"sys: {loopback.name if loopback else '—'}\n"
+        f"sys: {_source_label(loopback, how)}\n"
         f"file: {audio_path}\n"
         + (f"stops after {hms(limit)}\n" if limit else "")
         + "[dim]Ctrl-C to stop[/dim]",
@@ -234,7 +306,8 @@ def _record(args) -> Path | None:
         "started_at": started.isoformat(timespec="seconds"),
         "channel_roles": rec.roles,
         "devices": {"me": mic.name if mic else None,
-                    "them": loopback.name if loopback else None},
+                    "them": _source_label(loopback, how)},
+        "system_audio": how,
     }, indent=2))
 
     console.print(f"[green]Saved[/green] {hms(rec.seconds)} → {audio_path}")
@@ -359,6 +432,9 @@ def build_parser() -> argparse.ArgumentParser:
     def add_device_args(sp):
         sp.add_argument("--mic", help="microphone name (substring match)")
         sp.add_argument("--loopback", help="system-audio device name (substring match)")
+        sp.add_argument("--system-audio", choices=["auto", "tap", "device", "off"],
+                        help=f"how to capture the other side of the call "
+                             f"(default {config.SYSTEM_AUDIO})")
 
     def add_pipeline_args(sp):
         sp.add_argument("--model", help=f"Whisper model (default {config.WHISPER_MODEL})")

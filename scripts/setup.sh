@@ -72,11 +72,21 @@ ok "installed into .venv (extras: $EXTRAS)"
 
 # ------------------------------------------------------- 2. system audio
 if [[ $DO_AUDIO -eq 1 && "$(uname -s)" == "Darwin" ]]; then
-  bold "System-audio loopback (BlackHole)"
-  if [[ -d /Library/Audio/Plug-Ins/HAL/BlackHole2ch.driver ]]; then
-    ok "already installed"
+  bold "System audio"
+  # macOS 14.4+ can tap the system's output directly, which needs no driver and
+  # no admin password. Only older machines have to fall back to BlackHole.
+  if .venv/bin/python -c "
+import sys
+from localscribe import systemaudio
+sys.exit(0 if systemaudio.available()[0] else 1)
+" 2>/dev/null; then
+    ok "Core Audio tap available — no driver needed"
+    echo "    macOS may ask once for Screen & System Audio Recording permission."
+  elif [[ -d /Library/Audio/Plug-Ins/HAL/BlackHole2ch.driver ]]; then
+    ok "BlackHole already installed"
   elif command -v brew >/dev/null; then
-    echo "    The installer needs your password."
+    echo "    This macOS is too old for audio taps, so BlackHole is needed."
+    echo "    The installer will ask for your password."
     if brew install --cask blackhole-2ch; then
       ok "installed"
       NEEDS_REBOOT=1
