@@ -1,0 +1,8 @@
+.git
+.claude
+.venv
+.env*
+secrets
+tests
+__pycache__
+*.wav

@@ -258,13 +258,29 @@ def _attribute(
     return _label(roles, top, confident)
 
 
+def _split_by_timeline(words, speaker_of) -> list[tuple[str, float, float, str]]:
+    """Like _split_by_speaker, for when something else already knows who spoke."""
+    runs: list[list] = []
+    for w in words:
+        who = speaker_of(w.start, w.end)
+        if runs and runs[-1][0] == who:
+            runs[-1][2] = w.end
+            runs[-1][3].append(w.word)
+        else:
+            runs.append([who, w.start, w.end, [w.word]])
+    return [(who, start, end, "".join(ws).strip()) for who, start, end, ws in runs
+            if "".join(ws).strip()]
+
+
 def transcribe(
     audio_path: Path,
     model_name: str | None = None,
     language: str | None = None,
     engine: str | None = None,
     on_segment=None,
+    speaker_of=None,
 ) -> Transcript:
+    """`speaker_of(start, end) -> name` overrides channel-based attribution."""
     audio_path = Path(audio_path)
     meta = read_sidecar(audio_path)
 
@@ -288,7 +304,7 @@ def transcribe(
 
     raw_segments, detected, used_engine = engines.run(
         mono, model_name, lang,
-        want_words=multichannel,   # needed to place turn changes precisely
+        want_words=multichannel or speaker_of is not None,   # to place turn changes precisely
         engine=engine,
     )
 
@@ -311,7 +327,11 @@ def transcribe(
             on_segment(seg)
 
     for s in raw_segments:
-        if multichannel and s.words:
+        if speaker_of and s.words:
+            runs = _split_by_timeline(s.words, speaker_of)
+        elif speaker_of and s.text:
+            runs = [(speaker_of(s.start, s.end), s.start, s.end, s.text)]
+        elif multichannel and s.words:
             runs = _split_by_speaker(s.words, data, roles, bleed)
         elif s.text:
             runs = [(_attribute(data, roles, bleed, s.start, s.end), s.start, s.end, s.text)]
