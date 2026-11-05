@@ -1,0 +1,49 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Fake Meet</title>
+<!-- Stands in for Meet using the same labels the bot looks for. Plays two speakers
+     through the browser, names them in captions, then the host ends the call. -->
+<body>
+<div id="lobby">
+  Ready to join?
+  <button aria-label="Turn off microphone">mic</button>
+  <button id="join">Join now</button>
+</div>
+<div id="call" hidden>
+  <button aria-label="Leave call" id="leave">x</button>
+  <button aria-label="People - 2 joined">people</button>
+  <button aria-label="Chat with everyone" id="chatbtn">chat</button>
+  <button aria-label="Turn on captions" id="capbtn">cc</button>
+  <div id="chat" hidden><textarea aria-label="Send a message" id="msg"></textarea></div>
+  <div id="log"></div>
+  <div role="region" aria-label="Captions" id="captions"></div>
+</div>
+<script>
+  const $ = id => document.getElementById(id);
+  const say = (name, file) => new Promise(done => {
+    const row = document.createElement('div');
+    row.innerText = `${name}\nsomething is being said`;
+    $('captions').append(row);
+    const a = new Audio(file);
+    a.onended = done;
+    a.play();
+  });
+  $('join').onclick = async () => {
+    await new Promise(r => setTimeout(r, 1500));   // sits in the waiting room first
+    $('lobby').hidden = true;
+    $('call').hidden = false;
+    await new Promise(r => setTimeout(r, 3000));
+    await say('Ana Rivera', 'ana.wav');
+    await say('Ben Cohen', 'ben.wav');
+    await new Promise(r => setTimeout(r, 1000));
+    document.body.innerText = 'Your host ended the meeting for everyone';
+  };
+  $('chatbtn').onclick = () => { $('chat').hidden = !$('chat').hidden; };
+  $('capbtn').onclick = () => { window.captionsOn = true; };
+  $('msg').onkeydown = e => {
+    if (e.key === 'Enter') {
+      fetch('/notice', { method: 'POST', body: $('msg').value });
+      $('msg').value = '';
+    }
+  };
+</script>

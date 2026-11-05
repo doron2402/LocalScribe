@@ -50,6 +50,9 @@ Three things worth knowing before your first real meeting:
 
 No server to start, nothing running in the background, no API key, no network.
 
+Want it to attend meetings on its own and file notes in Google Drive instead? That
+is a separate, optional, networked [meeting bot](docs/meeting-bot.md).
+
 ## Open-source pieces
 
 | Job | Package | License |

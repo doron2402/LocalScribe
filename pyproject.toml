@@ -33,6 +33,9 @@ dependencies = [
 # Metal-accelerated speech-to-text. Apple Silicon only, roughly 2x faster.
 mlx = ["mlx-whisper>=0.4"]
 dev = ["pytest>=8.0", "ruff>=0.6"]
+# The meeting bot: joins Google Meet itself and files notes in Drive.
+# Playwright is pinned to the browsers shipped in docker/bot.Dockerfile's base image.
+bot = ["playwright==1.49.0", "google-auth>=2.30", "requests>=2.32"]
 
 [project.urls]
 Homepage = "https://github.com/doron2402/LocalScribe"
@@ -40,6 +43,7 @@ Issues = "https://github.com/doron2402/LocalScribe/issues"
 
 [project.scripts]
 localscribe = "localscribe.cli:main"
+localscribe-bot = "localscribe.bot.cli:main"
 
 [build-system]
 requires = ["hatchling"]
